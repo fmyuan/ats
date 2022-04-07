@@ -1,5 +1,16 @@
 /* -*-  mode: c++; indent-tabs-mode: nil -*- */
-//! Simulation controller and top-level driver
+
+/* Simulation controller and top-level driver, defined in *.xml, For ONE E3SM Land Model (ELM) Timestep
+
+     (1) ALL inputs for ELM-ATS interface, inc. *.xml, required by ATS would be in E3SM's input data directory
+     under 'lnd/clm2/ats'.
+
+     (2) ALL parameter list from *.xml ARE merely a data placeholder, by which ELM may reset or override,
+     By Methods defined in this class. For an example, not matter what values of 'start time' and 'end time'
+     in cycle_drvier, ELM will over-ride them each ELM timestep.
+
+ Authors: F.-M. Yuan (yuanf@ornl.gov), Ethan Coon (coonet@ornl.gov)
+*/
 
 /*
   ATS is released under the three-clause BSD License.
@@ -74,101 +85,39 @@ Example:
 
 */
 
-#ifndef ATS_COORDINATOR_HH_
-#define ATS_COORDINATOR_HH_
-
-#include "Teuchos_Time.hpp"
 #include "Teuchos_RCP.hpp"
 #include "Teuchos_ParameterList.hpp"
-#include "Epetra_MpiComm.h"
-#include "AmanziComm.hh"
-#include "AmanziTypes.hh"
 
-#include "VerboseObject.hh"
-
-namespace Amanzi {
-class TimeStepManager;
-class Visualization;
-class Checkpoint;
-class State;
-class TreeVector;
-class PK;
-class PK_ATS;
-class UnstructuredObservations;
-};
-
+#include "elm_ats_data.hh"
 
 namespace ATS {
 
-class Coordinator {
+class elm_ats_plist {
 
-public:
-  Coordinator(Teuchos::ParameterList& parameter_list,
-              Teuchos::RCP<Amanzi::State>& S,
-              Amanzi::Comm_ptr_type comm);
-              //              Amanzi::ObservationData& output_observations);
+  public:
 
-  // PK methods
-  virtual void setup();
-  virtual void initialize();
-  virtual void finalize();
-  void report_memory();
-  virtual bool advance();
-  void visualize(bool force=false);
-  void checkpoint(bool force=false);
-  double get_dt(bool after_fail=false);
+    //
+    elm_ats_plist(Teuchos::RCP<Teuchos::ParameterList> &plist);
+    ~elm_ats_plist() = default;
 
-  // one stop shopping
-  void cycle_driver();
+    //
+    void set_plist(elm_data &elmdata, const double start_ts, const double dt);
 
- protected:
-  void coordinator_init();
-  void read_parameter_list();
+  private:
 
-  // PK container and factory
-  Teuchos::RCP<Amanzi::PK> pk_;
+  // passing data via 'parameter list' (prior to model setup)
+  void plist_general_mesh_reset(elm_data &elmdata, const bool elm_matched=false);
+  void plist_materials_reset(elm_data &elmdata);
+  void plist_cycle_driver_reset(const double start_ts, const double dt);
 
-  // states
-  Teuchos::RCP<Amanzi::State> S_;
-  Teuchos::RCP<Amanzi::TreeVector> soln_;
-
-  // time step manager
-  Teuchos::RCP<Amanzi::TimeStepManager> tsm_;
-
-  // misc setup information
   Teuchos::RCP<Teuchos::ParameterList> parameter_list_;
-  Teuchos::RCP<Teuchos::ParameterList> coordinator_list_;
+  Teuchos::RCP<Teuchos::ParameterList> elm_drv_plist_;
+  Teuchos::RCP<Teuchos::ParameterList> elm_pks_plist_;
+  Teuchos::RCP<Teuchos::ParameterList> elm_state_plist_;
+  Teuchos::RCP<Teuchos::ParameterList> subpk_plist_;
+  Teuchos::RCP<Teuchos::ParameterList> srfpk_plist_;
 
-  double t0_, t1_;
-  double max_dt_, min_dt_;
-  int cycle0_, cycle1_;
+}; // close of class elm_ats_plist
 
-  // Epetra communicator
-  Amanzi::Comm_ptr_type comm_;
+} //close of namespace ATS
 
-  // vis and checkpointing
-  std::vector<Teuchos::RCP<Amanzi::Visualization> > visualization_;
-  std::vector<Teuchos::RCP<Amanzi::Visualization> > failed_visualization_;
-  Teuchos::RCP<Amanzi::Checkpoint> checkpoint_;
-  bool restart_;
-  std::string restart_filename_;
-
-  // observations
-  std::vector<Teuchos::RCP<Amanzi::UnstructuredObservations>> observations_;
-
-  // timers
-  Teuchos::RCP<Teuchos::Time> setup_timer_;
-  Teuchos::RCP<Teuchos::Time> cycle_timer_;
-  Teuchos::RCP<Teuchos::Time> timer_;
-  double duration_;
-  bool subcycled_ts_;
-
-  // fancy OS
-  Teuchos::RCP<Amanzi::VerboseObject> vo_;
-};
-
-
-
-} // close namespace ATS
-
-#endif

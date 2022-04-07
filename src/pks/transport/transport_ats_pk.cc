@@ -157,7 +157,7 @@ void Transport_ATS::Setup()
   S_->Require<CompositeVector,CompositeVectorSpace>(tcc_key_, tag_next_, passwd_)
     .SetMesh(mesh_)->SetGhosted(true)
     ->SetComponent("cell", AmanziMesh::CELL, num_components);
-  S_->GetRecordW(tcc_key_, tag_next_, passwd_).set_subfieldnames(component_names_);
+  S_->GetRecordSetW(tcc_key_).set_subfieldnames(component_names_);
   RequireEvaluatorPrimary(tcc_key_, tag_next_, *S_);
 
   S_->Require<CompositeVector,CompositeVectorSpace>(tcc_key_, tag_current_, passwd_);
@@ -179,7 +179,7 @@ void Transport_ATS::Setup()
   S_->Require<CompositeVector,CompositeVectorSpace>(solid_residue_mass_key_, tag_next_, name_)
     .SetMesh(mesh_)->SetGhosted(true)
     ->SetComponent("cell", AmanziMesh::CELL, num_components);
-  S_->GetRecordW(solid_residue_mass_key_, tag_next_, name_).set_subfieldnames(component_names_);
+  S_->GetRecordSetW(solid_residue_mass_key_).set_subfieldnames(component_names_);
 
   // This vector stores the conserved amount (in mols) of ncomponent
   // transported components, plus two for water.  The first water component is
@@ -193,7 +193,7 @@ void Transport_ATS::Setup()
   subfield_names.emplace_back("H2O_new");
   S_->Require<CompositeVector,CompositeVectorSpace>(conserve_qty_key_, tag_next_, name_)
     .SetMesh(mesh_)->SetGhosted(true)->SetComponent("cell", AmanziMesh::CELL, num_components+2);
-  S_->GetRecordW(conserve_qty_key_, tag_next_, name_).set_subfieldnames(subfield_names);
+  S_->GetRecordSetW(conserve_qty_key_).set_subfieldnames(subfield_names);
 
   // dependencies:
   // -- permeability

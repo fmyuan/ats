@@ -257,10 +257,8 @@ void Coordinator::initialize()
           sublist_p->set("file name base", std::string("ats_vis_")+domain_name_base);
         auto vis = Teuchos::rcp(new Amanzi::VisualizationDomainSet(*sublist_p));
         vis->set_name(domain_name_base);
+        vis->set_domain_set(dset);
         vis->set_mesh(dset->get_referencing_parent());
-        for (const auto& subdomain : *dset) {
-          vis->set_subdomain_mesh(subdomain, S_->GetMesh(subdomain));
-        }
         vis->CreateFiles(false);
         visualization_.push_back(vis);
       }
@@ -296,7 +294,7 @@ void Coordinator::finalize()
 {
   // Force checkpoint at the end of simulation, and copy to checkpoint_final
   pk_->CalculateDiagnostics(Amanzi::Tags::NEXT);
-  WriteCheckpoint(*checkpoint_, comm_, *S_, true);
+  checkpoint_->Write(*S_, Amanzi::Checkpoint::WriteType::FINAL);
 
   // flush observations to make sure they are saved
   for (const auto& obs : observations_) obs->Flush();
@@ -543,7 +541,7 @@ void Coordinator::checkpoint(bool force)
   int cycle = S_->get_cycle();
   double time = S_->get_time();
   if (force || checkpoint_->DumpRequested(cycle, time)) {
-    WriteCheckpoint(*checkpoint_, comm_, *S_);
+     checkpoint_->Write(*S_);
   }
 }
 
