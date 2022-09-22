@@ -462,19 +462,6 @@ ELM_ATSDriver::set_sources(double *soil_infiltration, double *soil_evaporation,
   Epetra_MultiVector& subsurf_ss = *S_->GetW<Amanzi::CompositeVector>(sub_src_key_, Amanzi::Tags::NEXT, sub_src_key_)
       .ViewComponent("cell", false);
 
-
-  // cell relative permeability [0-6.18?)
-  Amanzi::Key kr_key=Amanzi::Keys::getKey(domain_sub_,"relative_permeability");
-  S_->GetEvaluator(kr_key, Amanzi::Tags::NEXT).Update(*S_, kr_key);
-  const Epetra_MultiVector& kr =
-    *S_->Get<Amanzi::CompositeVector>(kr_key, Amanzi::Tags::NEXT).ViewComponent("cell",false);
-
-  // cell porosity [0-1.0]
-  Amanzi::Key poro_key=Amanzi::Keys::getKey(domain_sub_,"porosity");
-  S_->GetEvaluator(poro_key, Amanzi::Tags::NEXT).Update(*S_, poro_key);
-  const Epetra_MultiVector& poro =
-    *S_->Get<Amanzi::CompositeVector>(poro_key, Amanzi::Tags::NEXT).ViewComponent("cell",false);
-
   // cell volume [m3]
   Amanzi::Key cv_key=Amanzi::Keys::getKey(domain_sub_,"cell_volume");
   S_->GetEvaluator(cv_key, Amanzi::Tags::NEXT).Update(*S_, cv_key);
@@ -485,18 +472,6 @@ ELM_ATSDriver::set_sources(double *soil_infiltration, double *soil_evaporation,
   S_->GetEvaluator(cv1_key, Amanzi::Tags::NEXT).Update(*S_, cv1_key);    // this unit is in m2
   const Epetra_MultiVector& cv1 =
     *S_->Get<Amanzi::CompositeVector>(cv1_key, Amanzi::Tags::NEXT).ViewComponent("cell",false);
-
-  // cell water content: mols
-  S_->GetEvaluator(watl_key_, Amanzi::Tags::NEXT).Update(*S_, watl_key_);
-  const Epetra_MultiVector& watl = *S_->Get<Amanzi::CompositeVector>(watl_key_, Amanzi::Tags::NEXT)
-	      .ViewComponent("cell", false);
-
-  S_->GetEvaluator(satl_key_, Amanzi::Tags::NEXT).Update(*S_, satl_key_);
-  const Epetra_MultiVector& sat = *S_->Get<Amanzi::CompositeVector>(satl_key_, Amanzi::Tags::NEXT)
-      .ViewComponent("cell", false);
-
-  const Epetra_MultiVector& pc = *S_->Get<Amanzi::CompositeVector>("capillary_pressure_gas_liq", Amanzi::Tags::NEXT)
-      .ViewComponent("cell", false);
 
   // -- get the WRM models
   auto& wrm = S_->GetEvaluator(satl_key_, Amanzi::Tags::NEXT);
@@ -518,7 +493,7 @@ ELM_ATSDriver::set_sources(double *soil_infiltration, double *soil_evaporation,
     double srf_mol_h20_kg = srf_mol_dens[0][col] / srf_mass_dens[0][col];
     surf_ss[0][col] = std::max(0.0, (soil_evaporation[col]+soil_infiltration[col])) * srf_mol_h20_kg;      // (+) moles/m2/s
 
-    // scale soil evap and root_transpiration, together add to subsurface source
+    // scale soil evap (from top layer) and root_transpiration, together add to subsurface source
     auto& col_iter = mesh_subsurf_->cells_of_column(col);
     double net_soilevap = std::min(0.0, (soil_evaporation[col]+soil_infiltration[col])) * srf_mol_h20_kg;  // (-) moles/m2/s
     net_soilevap *= (cv1[0][col_iter[0]]/cv[0][col_iter[0]]);    // convert to moles/s, and then to moles/m3/s for adding to top soil layer due to 'cv' unit differences
