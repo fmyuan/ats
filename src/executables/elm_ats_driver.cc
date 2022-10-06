@@ -185,6 +185,11 @@ ELM_ATSDriver::setup(MPI_Fint *f_comm, const char *infile)
   auto& col_zero = mesh_subsurf_->cells_of_column(0);
   ncol_cells_ = col_zero.size();
 
+  for (std::size_t i=0; i!=ncolumns_; ++i) {
+	 std::cout<<"checking col: "<<i<<std::endl;
+	 auto& col= mesh_subsurf_->cells_of_column(i);
+	 for (const auto& cid: col) {std::cout<<"checking col_cells: "<<cid<<std::endl;}
+  }
   // require primary variables
   // -- subsurface water source
   S_->Require<Amanzi::CompositeVector,Amanzi::CompositeVectorSpace>(sub_src_key_, Amanzi::Tags::NEXT,  sub_src_key_)
@@ -479,7 +484,11 @@ ELM_ATSDriver::set_sources(double *soil_infiltration, double *soil_evaporation,
   Teuchos::RCP<Amanzi::Flow::WRMPartition> wrms_ = wrm_eval->get_WRMs();
 
   // ------------------------------------------------------------------
-  AMANZI_ASSERT(*ncols == ncolumns_ == surf_ss.MyLength());
+
+  std::cout<<"checking col/cell no. "<<*ncols<< " "<<ncolumns_<<" "<<ncol_cells_<<std::endl;
+
+  AMANZI_ASSERT(*ncols == ncolumns_);
+  AMANZI_ASSERT(ncolumns_ == surf_ss.MyLength());
   AMANZI_ASSERT(*ncells == ncolumns_ * ncol_cells_);
   AMANZI_ASSERT(*ncells == subsurf_ss.MyLength());
 
