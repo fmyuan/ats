@@ -198,12 +198,12 @@ set(elm_ats_inc_files
   elm_ats_api.h
   )
 
-add_amanzi_library(elm_ats_executable
+add_amanzi_library(elm_ats_shared
   SOURCE ${elm_ats_src_files}
   HEADERS ${elm_ats_inc_files}
   LINK_LIBS ${fates_link_libs} ${tpl_link_libs} ${ats_link_libs} ${amanzi_link_libs})
 if (APPLE AND BUILD_SHARED_LIBS)
-  set_target_properties(elm_ats_executable PROPERTIES LINK_FLAGS "-Wl,-undefined,dynamic_lookup")
+  set_target_properties(elm_ats_shared PROPERTIES LINK_FLAGS "-Wl,-undefined,dynamic_lookup")
 endif()
 
 add_amanzi_library(elm_ats_static
@@ -217,7 +217,7 @@ endif()
 
 add_amanzi_executable(elm_ats
   SOURCE elm_ats_main.cc
-  LINK_LIBS elm_ats_executable ${fates_link_libs} ${tpl_link_libs} ${ats_link_libs} ${amanzi_link_libs}
+  LINK_LIBS elm_ats_shared ${fates_link_libs} ${tpl_link_libs} ${ats_link_libs} ${amanzi_link_libs}
   OUTPUT_NAME elm_ats
   OUTPUT_DIRECTORY ${ATS_BINARY_DIR})
 
