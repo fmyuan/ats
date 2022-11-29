@@ -52,14 +52,14 @@ Richards::Richards(Teuchos::ParameterList& pk_tree,
     modify_predictor_bc_flux_(false),
     modify_predictor_first_bc_flux_(false),
     upwind_from_prev_flux_(false),
-    dynamic_mesh_(false),
     clobber_boundary_flux_dir_(false),
     vapor_diffusion_(false),
     perm_scale_(1.),
     jacobian_(false),
     jacobian_lag_(0),
     iter_(0),
-    iter_counter_time_(0.)
+    iter_counter_time_(0.),
+    fixed_kr_(false)
 {
   // set a default absolute tolerance
   if (!plist_->isParameter("absolute error tolerance"))
@@ -82,6 +82,9 @@ Richards::Richards(Teuchos::ParameterList& pk_tree,
       "capillary_pressure_gas_liq", "capillary_pressure_gas_liq");
   capillary_pressure_liq_ice_key_ = Keys::readKey(*plist_, domain_, 
       "capillary_pressure_liq_ice", "capillary_pressure_liq_ice");
+
+  if (S_->IsDeformableMesh(domain_))
+    deform_key_ = Keys::readKey(*plist_, domain_, "deformation indicator", "base_porosity");
 }
 
 // -------------------------------------------------------------
@@ -146,6 +149,9 @@ void Richards::SetupRichardsFlow_()
     Exceptions::amanzi_throw(message);
   }
 
+  // is dynamic mesh?  If so, get a key for indicating when the mesh has changed.
+  if (!deform_key_.empty()) S_->RequireEvaluator(deform_key_, tag_next_);
+
   // data allocation -- move to State!
   unsigned int c_owned = mesh_->num_entities(AmanziMesh::CELL, AmanziMesh::Parallel_type::OWNED);
   K_ = Teuchos::rcp(new std::vector<WhetStone::Tensor>(c_owned));
@@ -178,8 +184,9 @@ void Richards::SetupRichardsFlow_()
     upwinding_ = Teuchos::rcp(new Operators::UpwindCellCentered(name_, tag_next_));
     Krel_method_ = Operators::UPWIND_METHOD_CENTERED;
   } else if (method_name == "upwind with Darcy flux") {
+    double flux_eps = plist_->get<double>("upwind flux epsilon", 1.e-5);
     upwinding_ = Teuchos::rcp(new Operators::UpwindTotalFlux(name_,
-            tag_next_, flux_dir_key_, 1.e-5));
+            tag_next_, flux_dir_key_, flux_eps));
     Krel_method_ = Operators::UPWIND_METHOD_TOTAL_FLUX;
   } else if (method_name == "arithmetic mean") {
     upwinding_ = Teuchos::rcp(new Operators::UpwindArithmeticMean(name_,
@@ -268,15 +275,19 @@ void Richards::SetupRichardsFlow_()
 
     // require the derivative drel_perm/dp
     S_->RequireDerivative<CompositeVector,CompositeVectorSpace>(coef_key_,
-            tag_next_, key_, tag_next_);
+            tag_next_, key_, tag_next_)
+      .SetGhosted();
     if (mfd_pc_plist.get<std::string>("discretization primary") != "fv: default"){
       // MFD -- upwind required, require data
       duw_coef_key_ = Keys::getDerivKey(uw_coef_key_, key_);
       S_->Require<CompositeVector,CompositeVectorSpace>(duw_coef_key_, tag_next_,  name_)
         .SetMesh(mesh_)->SetGhosted()
         ->SetComponent("face", AmanziMesh::FACE, 1);
+
+      // note, this is here to be consistent -- unclear whether the 1.e-3 is useful or not?
+      double flux_eps = plist_->get<double>("upwind flux epsilon", 1.e-5);
       upwinding_deriv_ = Teuchos::rcp(new Operators::UpwindTotalFlux(name_,
-              tag_next_, flux_dir_key_, 1.e-8));
+              tag_next_, flux_dir_key_, 1.e-3 * flux_eps));
     } else {
       // FV -- no upwinding of derivative
       duw_coef_key_ = std::string();
@@ -481,9 +492,6 @@ void Richards::Initialize()
 
   // Initialize in the standard ways
   PK_PhysicalBDF_Default::Initialize();
-
-  // check whether this is a dynamic mesh problem
-  if (S_->IsDeformableMesh(domain_)) dynamic_mesh_ = true;
 
   // Set extra fields as initialized -- these don't currently have evaluators,
   // and will be initialized in the call to commit_state()
@@ -747,6 +755,7 @@ bool Richards::UpdatePermeabilityData_(const Tag& tag)
   Teuchos::OSTab tab = vo_->getOSTab();
   if (vo_->os_OK(Teuchos::VERB_EXTREME))
     *vo_->os() << "  Updating permeability?";
+  if (fixed_kr_) return false;
 
   Teuchos::RCP<const CompositeVector> rel_perm = S_->GetPtr<CompositeVector>(coef_key_, tag);
   bool update_perm = S_->GetEvaluator(coef_key_, tag)
@@ -764,6 +773,8 @@ bool Richards::UpdatePermeabilityData_(const Tag& tag)
       Teuchos::RCP<CompositeVector> flux_dir = S_->GetPtrW<CompositeVector>(flux_dir_key_, tag, name_);
       Teuchos::RCP<const CompositeVector> pres = S_->GetPtr<CompositeVector>(key_, tag);
 
+      if (!deform_key_.empty() && S_->GetEvaluator(deform_key_, tag_next_).Update(*S_, name_+" flux dir"))
+        face_matrix_diff_->SetTensorCoefficient(K_);
       face_matrix_diff_->SetDensity(rho);
       face_matrix_diff_->UpdateMatrices(Teuchos::null, pres.ptr());
       face_matrix_diff_->ApplyBCs(true, true, true);
@@ -842,9 +853,6 @@ bool Richards::UpdatePermeabilityData_(const Tag& tag)
         }
       }
     }
-
-    if (uw_rel_perm->HasComponent("face"))
-      uw_rel_perm->ScatterMasterToGhosted("face");
   }
 
   // debugging
@@ -860,6 +868,7 @@ bool Richards::UpdatePermeabilityDerivativeData_(const Tag& tag)
   Teuchos::OSTab tab = vo_->getOSTab();
   if (vo_->os_OK(Teuchos::VERB_EXTREME))
     *vo_->os() << "  Updating permeability derivatives?";
+  if (fixed_kr_) return false;
 
   bool update_perm = S_->GetEvaluator(coef_key_, tag).UpdateDerivative(*S_, name_, key_, tag);
   if (update_perm) {
@@ -872,9 +881,6 @@ bool Richards::UpdatePermeabilityDerivativeData_(const Tag& tag)
 
       // Upwind, only overwriting boundary faces if the wind says to do so.
       upwinding_deriv_->Update(drel_perm, duw_rel_perm, *S_);
-      duw_rel_perm.ScatterMasterToGhosted("face");
-    } else {
-      drel_perm.ScatterMasterToGhosted("cell");
     }
   }
 

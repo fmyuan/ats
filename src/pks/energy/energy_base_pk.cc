@@ -85,6 +85,9 @@ EnergyBase::EnergyBase(Teuchos::ParameterList& FElist,
   conductivity_key_ = Keys::readKey(*plist_, domain_, "thermal conductivity", "thermal_conductivity");
   uw_conductivity_key_ = Keys::readKey(*plist_, domain_, "upwinded thermal conductivity", "upwind_thermal_conductivity");
   uf_key_ = Keys::readKey(*plist_, domain_, "unfrozen fraction", "unfrozen_fraction");
+
+  if (S_->IsDeformableMesh(domain_))
+    deform_key_ = Keys::readKey(*plist_, domain_, "deformation indicator", "base_porosity");
 }
 
 
@@ -133,13 +136,23 @@ void EnergyBase::SetupEnergy_()
       .SetMesh(mesh_)
       ->AddComponent("cell", AmanziMesh::CELL, 1);
 
-    if (is_source_term_differentiable_ && (!is_source_term_finite_differentiable_) &&
-        S_->GetEvaluator(source_key_, tag_next_).IsDifferentiableWRT(*S_, key_, tag_next_)) {
+    if (is_source_term_differentiable_ && (!is_source_term_finite_differentiable_)) {
+      // NOTE, the following line is commented out because of the bug, amanzi/ats#167
+      //&& S_->GetEvaluator(source_key_, tag_next_).IsDifferentiableWRT(*S_, key_, tag_next_)) {
       // require derivative of source
       S_->RequireDerivative<CompositeVector,CompositeVectorSpace>(source_key_,
-              tag_next_, key_, tag_next_);
+              tag_next_, key_, tag_next_)
+        .SetMesh(mesh_)
+        ->AddComponent("cell", AmanziMesh::CELL, 1);
+      // NOTE, remove SetMesh/AddComponent lines after fixing amanzi/ats#167.
+      // The mesh should get set by the evaluator, but when
+      // the evaluator isn't actually differentiable, it
+      // doesn't get done.
     }
   }
+
+  // is dynamic mesh?  If so, get a key for indicating when the mesh has changed.
+  if (!deform_key_.empty()) S_->RequireEvaluator(deform_key_, tag_next_);
 
   // Set up Operators
   // -- boundary conditions
@@ -227,7 +240,8 @@ void EnergyBase::SetupEnergy_()
 
     // require the derivative dcond/dp
     S_->RequireDerivative<CompositeVector,CompositeVectorSpace>(conductivity_key_,
-            tag_next_, key_, tag_next_);
+            tag_next_, key_, tag_next_)
+      .SetGhosted();
 
     if (mfd_pc_plist.get<std::string>("discretization primary") != "fv: default"){
       // MFD or NLFV -- upwind required
@@ -254,15 +268,16 @@ void EnergyBase::SetupEnergy_()
   preconditioner_acc_ = Teuchos::rcp(new Operators::PDE_Accumulation(acc_pc_plist, preconditioner_));
 
   //  -- advection terms
+  // -- set up the evaluator for enthalpy, whether or not we advect the thing,
+  //    we may need it for exchange fluxes with surface/subsurface coupling,
+  //    etc.
+  if (plist_->isSublist("enthalpy evaluator")) {
+    Teuchos::ParameterList& enth_list = S_->GetEvaluatorList(enthalpy_key_);
+    enth_list.setParameters(plist_->sublist("enthalpy evaluator"));
+    enth_list.set<std::string>("evaluator type", "enthalpy");
+  }
   is_advection_term_ = plist_->get<bool>("include thermal advection", true);
   if (is_advection_term_) {
-    // -- set up the evaluator for enthalpy
-    if (plist_->isSublist("enthalpy evaluator")) {
-      Teuchos::ParameterList& enth_list = S_->GetEvaluatorList(enthalpy_key_);
-      enth_list.setParameters(plist_->sublist("enthalpy evaluator"));
-      enth_list.set<std::string>("evaluator type", "enthalpy");
-    }
-
     // -- create the forward operator for the advection term
     Teuchos::ParameterList advect_plist = plist_->sublist("advection");
     matrix_adv_ = Teuchos::rcp(new Operators::PDE_AdvectionUpwind(advect_plist, mesh_));
@@ -285,7 +300,14 @@ void EnergyBase::SetupEnergy_()
         ->AddComponent("cell", AmanziMesh::CELL, 1)
         ->AddComponent("boundary_face", AmanziMesh::BOUNDARY_FACE, 1);
       S_->RequireDerivative<CompositeVector,CompositeVectorSpace>(enthalpy_key_,
-              tag_next_, key_, tag_next_);
+              tag_next_, key_, tag_next_)
+        .SetGhosted();
+
+      // -- diagnostic for advected energy
+      requireAtNext(adv_energy_flux_key_, tag_next_, *S_, name_)
+        .SetMesh(mesh_)->SetGhosted()
+        ->SetComponent("face", AmanziMesh::FACE, 1);
+
     } else {
       // -- enthalpy data, evaluator
       requireAtCurrent(enthalpy_key_, tag_current_, *S_)
@@ -293,6 +315,11 @@ void EnergyBase::SetupEnergy_()
         ->SetGhosted()
         ->AddComponent("cell", AmanziMesh::CELL, 1)
         ->AddComponent("boundary_face", AmanziMesh::BOUNDARY_FACE, 1);
+
+      // -- diagnostic for advected energy
+      requireAtCurrent(adv_energy_flux_key_, tag_current_, *S_, name_)
+        .SetMesh(mesh_)->SetGhosted()
+        ->SetComponent("face", AmanziMesh::FACE, 1);
     }
   }
 
@@ -361,12 +388,6 @@ void EnergyBase::SetupEnergy_()
     .SetMesh(mesh_)->SetGhosted()
     ->SetComponent("face", AmanziMesh::FACE, 1);
 
-  if (is_advection_term_) {
-    requireAtNext(adv_energy_flux_key_, tag_next_, *S_, name_)
-      .SetMesh(mesh_)->SetGhosted()
-      ->SetComponent("face", AmanziMesh::FACE, 1);
-  }
-
   // Globalization and other timestep control flags
   modify_predictor_for_freezing_ =
       plist_->get<bool>("modify predictor for freezing", false);
@@ -389,9 +410,10 @@ void EnergyBase::Initialize() {
   changedEvaluatorPrimary(energy_flux_key_, tag_next_, *S_);
 
   if (is_advection_term_) {
-    S_->GetW<CompositeVector>(adv_energy_flux_key_, tag_next_, name()).PutScalar(0.0);
-    S_->GetRecordW(adv_energy_flux_key_, tag_next_, name()).set_initialized();
-    changedEvaluatorPrimary(adv_energy_flux_key_, tag_next_, *S_);
+    Tag adv_energy_flux_tag = implicit_advection_ ? tag_next_ : tag_current_;
+    S_->GetW<CompositeVector>(adv_energy_flux_key_, adv_energy_flux_tag, name()).PutScalar(0.0);
+    S_->GetRecordW(adv_energy_flux_key_, adv_energy_flux_tag, name()).set_initialized();
+    changedEvaluatorPrimary(adv_energy_flux_key_, adv_energy_flux_tag, *S_);
   }
 
   // initialize upwind conductivities
