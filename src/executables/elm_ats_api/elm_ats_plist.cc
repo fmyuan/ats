@@ -36,7 +36,7 @@ namespace ATS {
 elm_ats_plist::elm_ats_plist(Teuchos::RCP<Teuchos::ParameterList> &plist){
   //
   parameter_list_  = plist;
-  elm_drv_plist_   = Teuchos::sublist(plist, "cycle driver");
+  elm_drv_plist_   = Teuchos::sublist(plist, "ELM driver");
   elm_pks_plist_   = Teuchos::sublist(plist, "PKs");
   elm_state_plist_ = Teuchos::sublist(plist, "state");
 

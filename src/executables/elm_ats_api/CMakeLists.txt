@@ -18,6 +18,7 @@ set(elm_ats_src_files
   ${ATS_SOURCE_DIR}/src/executables/ats_mesh_factory.cc
   elm_ats_driver.cc
   elm_ats_api.cc
+  elm_ats_plist.cc
   )
 
 set(elm_ats_inc_files
@@ -25,6 +26,8 @@ set(elm_ats_inc_files
   ${ATS_SOURCE_DIR}/src/executables/ats_mesh_factory.hh
   elm_ats_driver.hh
   elm_ats_api.h
+  elm_ats_plist.hh
+  elm_ats_data.hh
   )
 
 ## build shared lib
