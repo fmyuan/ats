@@ -101,10 +101,13 @@ ELM_ATSDriver::ELM_ATSDriver(const Teuchos::RCP<Teuchos::ParameterList>& plist,
   // keys for fields exchanged with ELM
   sub_src_key_ = Amanzi::Keys::readKey(*plist, domain_subsurf_, "subsurface source", "source_sink");
   srf_src_key_ = Amanzi::Keys::readKey(*plist, domain_surf_, "surface source", "source_sink");
+
   pres_key_ = Amanzi::Keys::readKey(*plist, domain_subsurf_, "pressure", "pressure");
   pd_key_ = Amanzi::Keys::readKey(*plist, domain_surf_, "ponded depth", "ponded_depth");
   sat_liq_key_ = Amanzi::Keys::readKey(*plist, domain_subsurf_, "saturation_liquid", "saturation_liquid");
-  sat_ice_key_ = Amanzi::Keys::readKey(*plist, domain_subsurf_, "saturation_ice", "saturation_ice");
+  //sat_ice_key_ = Amanzi::Keys::readKey(*plist, domain_subsurf_, "saturation_ice", "saturation_ice");
+  pc_key_ = Amanzi::Keys::readKey(*plist, domain_subsurf_, "capillary pressure, capillary pressure over liquid", "capillary_pressure_gas_liq");
+
   poro_key_ = Amanzi::Keys::readKey(*plist, domain_subsurf_, "porosity", "porosity");
 
   elev_key_ = Amanzi::Keys::readKey(*plist, domain_surf_, "elevation", "elevation");
@@ -255,22 +258,6 @@ void ELM_ATSDriver::advance(double dt, bool visout, bool chkout)
     Exceptions::amanzi_throw(msg);
   }
 
-  // update ATS->ELM data if necessary
-  S_->GetEvaluator(pres_key_, Amanzi::Tags::NEXT).Update(*S_, pres_key_);
-  const Epetra_MultiVector& pres = *S_->Get<Amanzi::
-    CompositeVector>(pres_key_, Amanzi::Tags::NEXT).ViewComponent("cell", false);
-
-  S_->GetEvaluator(sat_liq_key_, Amanzi::Tags::NEXT).Update(*S_, sat_liq_key_);
-  const Epetra_MultiVector& satl = *S_->Get<Amanzi::
-    CompositeVector>(sat_liq_key_, Amanzi::Tags::NEXT).ViewComponent("cell", false);
-
-  S_->GetEvaluator(sat_ice_key_, Amanzi::Tags::NEXT).Update(*S_, sat_ice_key_);
-  const Epetra_MultiVector& sati = *S_->Get<Amanzi::
-    CompositeVector>(sat_ice_key_, Amanzi::Tags::NEXT).ViewComponent("cell", false);
-
-  //S_->GetEvaluator(poro_key_, Amanzi::Tags::NEXT).Update(*S_, poro_key_);
-  //const Epetra_MultiVector& poro = *S_->Get<Amanzi::
-  //CompositeVector>(poro_key_, Amanzi::Tags::NEXT).ViewComponent("cell", false);
 
 } // advance()
 
@@ -522,13 +509,13 @@ ELM_ATSDriver::get_waterstate(
   S_->GetEvaluator(sat_liq_key_, Amanzi::Tags::NEXT).Update(*S_, sat_liq_key_);
   const Epetra_MultiVector& satl = *S_->Get<Amanzi::CompositeVector>(sat_liq_key_, Amanzi::Tags::NEXT)
       .ViewComponent("cell", false);
-  S_->GetEvaluator(sat_ice_key_, Amanzi::Tags::NEXT).Update(*S_, sat_ice_key_);
-  const Epetra_MultiVector& sati = *S_->Get<Amanzi::CompositeVector>(sat_ice_key_, Amanzi::Tags::NEXT)
-      .ViewComponent("cell", false);
+  //S_->GetEvaluator(sat_ice_key_, Amanzi::Tags::NEXT).Update(*S_, sat_ice_key_);
+  //const Epetra_MultiVector& sati = *S_->Get<Amanzi::CompositeVector>(sat_ice_key_, Amanzi::Tags::NEXT)
+  //    .ViewComponent("cell", false);
 
   // cell water matric potential: -Pa
-  S_->GetEvaluator(pc_key_, Amanzi::Tags::NEXT).Update(*S_, "capillary_pressure_gas_liq");
-  const Epetra_MultiVector& pc = *S_->Get<Amanzi::CompositeVector>("capillary_pressure_gas_liq", Amanzi::Tags::NEXT)
+  S_->GetEvaluator(pc_key_, Amanzi::Tags::NEXT).Update(*S_, pc_key_);
+  const Epetra_MultiVector& pc = *S_->Get<Amanzi::CompositeVector>(pc_key_, Amanzi::Tags::NEXT)
       .ViewComponent("cell", false);
 
 
@@ -556,7 +543,7 @@ ELM_ATSDriver::get_waterstate(
       // mols --> kgH2O/m3-cell
       sat_liq[col*ncells_per_col_+i] = satl[0][col_iter[i]]/cv[0][col_iter[i]]*convertor;
 
-      sat_ice[col*ncells_per_col_+i] = sati[0][col_iter[i]]/cv[0][col_iter[i]]*convertor; // (TODO - checking)
+      //sat_ice[col*ncells_per_col_+i] = sati[0][col_iter[i]]/cv[0][col_iter[i]]*convertor; // (TODO - checking)
 
     }
   }
