@@ -1,15 +1,16 @@
-/* -*-  mode: c++; indent-tabs-mode: nil -*- */
 /*
-  Amanzi is released under the three-clause BSD License.
+  Copyright 2010-202x held jointly by participating institutions.
+  ATS is released under the three-clause BSD License.
   The terms of use and "as is" disclaimer for this license are
   provided in the top-level COPYRIGHT file.
 
-  Author: Ethan Coon (ecoon@ornl.gov)
+  Authors: Ethan Coon (ecoon@ornl.gov)
 */
 
 //! A set of helper functions for doing common things in PKs.
-
 #pragma once
+
+#include "Teuchos_TimeMonitor.hpp"
 
 #include "Mesh.hh"
 #include "CompositeVector.hh"
@@ -17,16 +18,9 @@
 
 #include "EvaluatorPrimary.hh"
 #include "State.hh"
+#include "Chemistry_PK.hh"
 
 namespace Amanzi {
-
-// -----------------------------------------------------------------------------
-// Propagates density metadata to State when EOS basis is 'both' and the
-// alternate density is undefined. Require density and evaluator if needed.
-// -----------------------------------------------------------------------------
-void
-requireDensityEvaluator(const Key& dens_key, const Tag& tag,
-                 Teuchos::ParameterList& plist, State& S);
 
 bool
 aliasVector(State& S, const Key& key, const Tag& target, const Tag& alias);
@@ -49,7 +43,9 @@ applyDirichletBCs(const Operators::BCs& bcs, CompositeVector& u);
 //  -- internal cell
 // -----------------------------------------------------------------------------
 double
-getFaceOnBoundaryValue(AmanziMesh::Entity_ID f, const CompositeVector& u, const Operators::BCs& bcs);
+getFaceOnBoundaryValue(AmanziMesh::Entity_ID f,
+                       const CompositeVector& u,
+                       const Operators::BCs& bcs);
 
 
 // -----------------------------------------------------------------------------
@@ -63,17 +59,86 @@ getBoundaryDirection(const AmanziMesh::Mesh& mesh, AmanziMesh::Entity_ID f);
 // Get a primary variable evaluator for a key at tag
 // -----------------------------------------------------------------------------
 Teuchos::RCP<EvaluatorPrimaryCV>
-RequireEvaluatorPrimary(const Key& key, const Tag& tag, State& S);
+requireEvaluatorPrimary(const Key& key, const Tag& tag, State& S, bool or_die = true);
 
 
 // -----------------------------------------------------------------------------
 // Mark primary variable evaluator as changed.
 // -----------------------------------------------------------------------------
+bool
+changedEvaluatorPrimary(const Key& key, const Tag& tag, State& S, bool or_die = true);
+
+
+// -----------------------------------------------------------------------------
+// Require a vector and a primary variable evaluator at current tag(s).
+// -----------------------------------------------------------------------------
+CompositeVectorSpace&
+requireAtCurrent(const Key& key,
+                 const Tag& tag,
+                 State& S,
+                 const Key& name = "",
+                 bool is_eval = true);
+
+
+// -----------------------------------------------------------------------------
+// Require a vector and a primary variable evaluator at next tag(s).
+// -----------------------------------------------------------------------------
+CompositeVectorSpace&
+requireAtNext(const Key& key, const Tag& tag, State& S, const Key& name = "");
+
+// -----------------------------------------------------------------------------
+// Require assignment evaluator, which allows tracking old data.
+// -----------------------------------------------------------------------------
+Teuchos::RCP<EvaluatorPrimaryCV>
+requireEvaluatorAssign(const Key& key, const Tag& tag, State& S);
+
+// -----------------------------------------------------------------------------
+// Assign if it is an assignment evaluator.
+// -----------------------------------------------------------------------------
 void
-ChangedEvaluatorPrimary(const Key& key, const Tag& tag, State& S);
+assign(const Key& key, const Tag& tag_dest, const Tag& tag_source, State& S);
 
 
+// -----------------------------------------------------------------------------
+// Helper functions for working with Amanzi's Chemistry PK
+// -----------------------------------------------------------------------------
+void
+convertConcentrationToAmanzi(const Epetra_MultiVector& mol_den,
+                             int num_aqueous,
+                             const Epetra_MultiVector& tcc_ats,
+                             Epetra_MultiVector& tcc_amanzi);
+
+void
+convertConcentrationToATS(const Epetra_MultiVector& mol_den,
+                          int num_aqueous,
+                          const Epetra_MultiVector& tcc_ats,
+                          Epetra_MultiVector& tcc_amanzi);
+
+bool
+advanceChemistry(Teuchos::RCP<AmanziChemistry::Chemistry_PK> chem_pk,
+                 double t_old,
+                 double t_new,
+                 bool reinit,
+                 const Epetra_MultiVector& mol_dens,
+                 Teuchos::RCP<Epetra_MultiVector> tcc,
+                 Teuchos::Time& timer);
 
 
+void
+copyMeshCoordinatesToVector(const AmanziMesh::Mesh& mesh, CompositeVector& vec);
+void
+copyVectorToMeshCoordinates(const CompositeVector& vec, AmanziMesh::Mesh& mesh);
+
+
+// Compute pairs of value + location
+typedef struct ValLoc {
+  double value;
+  AmanziMesh::Entity_ID gid;
+} ENorm_t;
+
+int
+commMaxValLoc(const Comm_type& comm, const ValLoc& local, ValLoc& global);
+ValLoc
+maxValLoc(const Epetra_Vector& vec);
 
 } // namespace Amanzi

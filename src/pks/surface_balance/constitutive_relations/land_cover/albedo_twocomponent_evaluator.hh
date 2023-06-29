@@ -1,10 +1,12 @@
 /*
+  Copyright 2010-202x held jointly by participating institutions.
   ATS is released under the three-clause BSD License.
   The terms of use and "as is" disclaimer for this license are
   provided in the top-level COPYRIGHT file.
 
   Authors: Ethan Coon (coonet@ornl.gov)
 */
+
 //! Evaluates albedos and emissivities in a two-component subgrid model.
 /*!
 
@@ -28,10 +30,12 @@ Requires the use of LandCover types, for ground albedo and emissivity.
    * `"emissivity snow [-]`" ``[double]`` **0.98**
 
    KEYS:
+
    - `"subgrid albedos`" **DOMAIN-subgrid_albedos**
    - `"subgrid emissivities`" **DOMAIN-subgrid_emissivities**
 
    DEPENDENCIES:
+
    - `"snow density`" **SNOW_DOMAIN-density**
    - `"ponded depth`" **DOMAIN-ponded_depth**
    - `"unfrozen fraction`" **DOMAIN-unfrozen_fraction**
@@ -52,20 +56,25 @@ class AlbedoTwoComponentEvaluator : public EvaluatorSecondaryMonotypeCV {
  public:
   explicit AlbedoTwoComponentEvaluator(Teuchos::ParameterList& plist);
   AlbedoTwoComponentEvaluator(const AlbedoTwoComponentEvaluator& other) = default;
-  virtual Teuchos::RCP<Evaluator> Clone() const override {
+  virtual Teuchos::RCP<Evaluator> Clone() const override
+  {
     return Teuchos::rcp(new AlbedoTwoComponentEvaluator(*this));
   }
 
  protected:
+  // custom EC used to set subfield names
+  virtual void EnsureCompatibility_Structure_(State& S) override;
+
+  // custom EC used because deps have 1 component not 2
   virtual void EnsureCompatibility_ToDeps_(State& S) override;
 
   // Required methods from EvaluatorSecondaryMonotypeCV
-  virtual void Evaluate_(const State& S,
-          const std::vector<CompositeVector*>& results) override;
+  virtual void Evaluate_(const State& S, const std::vector<CompositeVector*>& results) override;
 
   virtual void EvaluatePartialDerivative_(const State& S,
-          const Key& wrt_key, const Tag& wrt_tag,
-          const std::vector<CompositeVector*>& results) override;
+                                          const Key& wrt_key,
+                                          const Tag& wrt_tag,
+                                          const std::vector<CompositeVector*>& results) override;
 
  protected:
   Key domain_;
@@ -82,9 +91,9 @@ class AlbedoTwoComponentEvaluator : public EvaluatorSecondaryMonotypeCV {
   LandCoverMap land_cover_;
 
  private:
-  static Utils::RegisteredFactory<Evaluator,AlbedoTwoComponentEvaluator> reg_;
+  static Utils::RegisteredFactory<Evaluator, AlbedoTwoComponentEvaluator> reg_;
 };
 
-}  // namespace Relations
-}  // namespace SurfaceBalance
-}  // namespace Amanzi
+} // namespace Relations
+} // namespace SurfaceBalance
+} // namespace Amanzi

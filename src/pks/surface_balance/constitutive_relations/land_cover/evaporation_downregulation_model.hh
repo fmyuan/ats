@@ -1,10 +1,12 @@
 /*
+  Copyright 2010-202x held jointly by participating institutions.
   ATS is released under the three-clause BSD License.
   The terms of use and "as is" disclaimer for this license are
   provided in the top-level COPYRIGHT file.
 
   Authors: Ethan Coon (ecoon@lanl.gov)
 */
+
 //! Downregulates bare soil evaporation through a dessicated zone.
 /*!
 
@@ -14,10 +16,11 @@ Sakagucki and Zeng 2009 equations 9 and 10.
 
 Requires two parameters,
 
-* `"dessicated zone thickness [m]`" Thickness over which vapor must diffuse
+
+* `"dessicated zone thickness [m]`" ``[double]`` Thickness over which vapor must diffuse
   when the soil is dry.
 
-* `"Clapp and Hornberger b [-]`" Exponent of the Clapp & Hornberger curve for
+* `"Clapp and Hornberger b [-]`" ``[double]`` Exponent of the Clapp & Hornberger curve for
   the top layer of soil.  Nominally this could probably be pulled from van
   Genuchten curves that we typically use, but it doesn't appear to be the most
   important parameter.
@@ -35,11 +38,8 @@ namespace SurfaceBalance {
 namespace Relations {
 
 class EvaporationDownregulationModel {
-
  public:
-  explicit
-  EvaporationDownregulationModel(double dessicated_zone_thickness,
-          double clapp_horn_b);
+  explicit EvaporationDownregulationModel(double dessicated_zone_thickness, double clapp_horn_b);
   EvaporationDownregulationModel(Teuchos::ParameterList& plist);
   EvaporationDownregulationModel(const LandCover& lc);
 
@@ -53,13 +53,10 @@ class EvaporationDownregulationModel {
   void InitializeFromPlist_(Teuchos::ParameterList& plist);
 
  protected:
-
   double dess_dz_;
   double Clapp_Horn_b_;
-
 };
 
-} //namespace
-} //namespace
-} //namespace
-
+} // namespace Relations
+} // namespace SurfaceBalance
+} // namespace Amanzi

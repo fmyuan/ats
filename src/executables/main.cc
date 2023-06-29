@@ -1,3 +1,12 @@
+/*
+  Copyright 2010-202x held jointly by participating institutions.
+  ATS is released under the three-clause BSD License.
+  The terms of use and "as is" disclaimer for this license are
+  provided in the top-level COPYRIGHT file.
+
+  Authors:
+*/
+
 #include <iostream>
 
 #include <Epetra_Comm.h>
@@ -19,62 +28,46 @@
 
 #include "dbc.hh"
 #include "errors.hh"
-#include "simulation_driver.hh"
+#include "ats_driver.hh"
 
 // registration files
-#include "state_evaluators_registration.hh"
-
-#include "ats_relations_registration.hh"
-#include "ats_transport_registration.hh"
-#include "ats_energy_pks_registration.hh"
-#include "ats_energy_relations_registration.hh"
-#include "ats_flow_pks_registration.hh"
-#include "ats_flow_relations_registration.hh"
-#include "ats_deformation_registration.hh"
-#include "ats_bgc_registration.hh"
-#include "ats_surface_balance_registration.hh"
-#include "ats_mpc_registration.hh"
-//#include "ats_sediment_transport_registration.hh"
-#include "mdm_transport_registration.hh"
-#include "multiscale_transport_registration.hh"
-#ifdef ALQUIMIA_ENABLED
-#include "pks_chemistry_registration.hh"
-#endif
+#include "ats_registration_files.hh"
 
 
 // include fenv if it exists
 #include "boost/version.hpp"
 #if (BOOST_VERSION / 100 % 1000 >= 46)
-#include "boost/config.hpp"
-#ifndef BOOST_NO_FENV_H
-#ifdef _GNU_SOURCE
-#define AMANZI_USE_FENV
-#include "boost/detail/fenv.hpp"
-#endif
-#endif
+#  include "boost/config.hpp"
+#  ifndef BOOST_NO_FENV_H
+#    ifdef _GNU_SOURCE
+#      define AMANZI_USE_FENV
+#      include "boost/detail/fenv.hpp"
+#    endif
+#  endif
 #endif
 
 #include "boost/filesystem.hpp"
 
-int main(int argc, char *argv[])
+int
+main(int argc, char* argv[])
 {
-
 #ifdef AMANZI_USE_FENV
   //  feenableexcept(FE_DIVBYZERO | FE_INVALID | FE_OVERFLOW);
   feraiseexcept(FE_DIVBYZERO | FE_INVALID | FE_OVERFLOW);
 #endif
 
-  Teuchos::GlobalMPISession mpiSession(&argc,&argv,0);
+  Teuchos::GlobalMPISession mpiSession(&argc, &argv, 0);
   int rank = mpiSession.getRank();
 
   std::string input_filename;
-  if ((argc >= 2) && (argv[argc-1][0] != '-')) {
-    input_filename = std::string(argv[argc-1]);
+  if ((argc >= 2) && (argv[argc - 1][0] != '-')) {
+    input_filename = std::string(argv[argc - 1]);
     argc--;
   }
 
   Teuchos::CommandLineProcessor clp;
-  clp.setDocString("Run ATS simulations for ecosystem hydrology.\n\nStandard usage: ats input.xml\n");
+  clp.setDocString(
+    "Run ATS simulations for ecosystem hydrology.\n\nStandard usage: ats input.xml\n");
 
   std::string opt_input_filename = "";
   clp.setOption("xml_file", &opt_input_filename, "XML input file");
@@ -83,29 +76,29 @@ int main(int argc, char *argv[])
   clp.setOption("version", "no_version", &version, "Print version number and exit.");
 
   bool print_version(false);
-  clp.setOption("print_version", "no_print_version", &print_version, "Print full version info and exit.");
+  clp.setOption(
+    "print_version", "no_print_version", &print_version, "Print full version info and exit.");
 
   std::string verbosity;
-  clp.setOption("verbosity", &verbosity, "Default verbosity level: \"none\", \"low\", \"medium\", \"high\", \"extreme\".");
+  clp.setOption("verbosity",
+                &verbosity,
+                "Default verbosity level: \"none\", \"low\", \"medium\", \"high\", \"extreme\".");
+
+  std::string writing_rank;
+  clp.setOption("write_on_rank", &writing_rank, "Rank on which to write VerboseObjects");
 
   clp.throwExceptions(false);
   clp.recogniseAllOptions(true);
 
   auto parseReturn = clp.parse(argc, argv);
-  if (parseReturn == Teuchos::CommandLineProcessor::PARSE_HELP_PRINTED) {
-    return 0;
-  }
-  if (parseReturn != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL) {
-    return 1;
-  }
+  if (parseReturn == Teuchos::CommandLineProcessor::PARSE_HELP_PRINTED) { return 0; }
+  if (parseReturn != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL) { return 1; }
 
 #define XSTR(s) STR(s)
 #define STR(s) #s
   // check for version info request
   if (version) {
-    if (rank == 0) {
-      std::cout << "ATS version " << XSTR(ATS_VERSION) << std::endl;
-    }
+    if (rank == 0) { std::cout << "ATS version " << XSTR(ATS_VERSION) << std::endl; }
     return 0;
   }
   if (print_version) {
@@ -144,6 +137,24 @@ int main(int argc, char *argv[])
     return 1;
   }
 
+  // parse the writing rank
+  if (writing_rank.empty()) {
+    // pass
+  } else {
+    int writing_rank_j;
+    try {
+      writing_rank_j = std::stoi(writing_rank);
+    } catch (std::invalid_argument& e) {
+      std::cerr << "ERROR: invalid writing rank \"" << writing_rank << "\"" << std::endl;
+      clp.printHelpMessage("ats", std::cerr);
+    }
+    if (writing_rank_j < 0) {
+      std::cerr << "ERROR: invalid writing rank \"" << writing_rank << "\"" << std::endl;
+      clp.printHelpMessage("ats", std::cerr);
+    }
+    Amanzi::VerboseObject::global_writing_rank = writing_rank_j;
+  }
+
   // parse the input file and check validity
   if (input_filename.empty() && !opt_input_filename.empty()) input_filename = opt_input_filename;
   if (input_filename.empty()) {
@@ -172,27 +183,25 @@ int main(int argc, char *argv[])
   Teuchos::readVerboseObjectSublist(&*plist, &fos, &verbosity_from_list);
   if (verbosity_from_list != Teuchos::VERB_DEFAULT)
     Amanzi::VerboseObject::global_default_level = verbosity_from_list;
-  if (!verbosity.empty())
-    Amanzi::VerboseObject::global_default_level = opt_level;
+  if (!verbosity.empty()) Amanzi::VerboseObject::global_default_level = opt_level;
 
-  // -- create simulator object and run
-  ATS::SimulationDriver simulator;
+  if (Amanzi::VerboseObject::global_default_level != Teuchos::VERB_NONE && (rank == 0)) {
+    std::cout << "ATS version " << XSTR(ATS_VERSION) << ", Amanzi version " << XSTR(AMANZI_VERSION)
+              << std::endl;
+  }
+
+
+  // create the top level driver and run simulation
+  ATS::ATSDriver driver(plist, comm);
   int ret = 0;
   try {
-    ret = simulator.Run(comm, *plist);
+    ret = driver.run();
   } catch (std::string& s) {
-    if (rank == 0) {
-      std::cerr << "ERROR:" << std::endl
-                << s << std::endl;
-    }
+    if (rank == 0) { std::cerr << "ERROR:" << std::endl << s << std::endl; }
     return 1;
   } catch (int& ierr) {
-    if (rank == 0) {
-      std::cerr << "ERROR: unknown error code " << ierr << std::endl;
-    }
+    if (rank == 0) { std::cerr << "ERROR: unknown error code " << ierr << std::endl; }
     return ierr;
   }
   return ret;
 }
-
-

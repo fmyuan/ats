@@ -1,4 +1,5 @@
 /*
+  Copyright 2010-202x held jointly by participating institutions.
   ATS is released under the three-clause BSD License.
   The terms of use and "as is" disclaimer for this license are
   provided in the top-level COPYRIGHT file.
@@ -7,8 +8,8 @@
            Markus Berndt
            Daniil Svyatskiy
 */
-//! Subsidence through bulk ice loss and cell volumetric change.
 
+//! Subsidence through bulk ice loss and cell volumetric change.
 /*!
 
 This process kernel provides for going from a cell volumetric change to an
@@ -92,6 +93,7 @@ values from the old time.
       "deformation mode" == "prescribed"
 
     EVALUATORS:
+
     - `"saturation_ice`" **DOMAIN-saturation_ice**
     - `"saturation_liquid`" **DOMAIN-saturation_liquid**
     - `"saturation_gas`" **DOMAIN-saturation_gas**
@@ -114,19 +116,14 @@ values from the old time.
 #include "PK.hh"
 #include "PK_Factory.hh"
 #include "pk_physical_default.hh"
+#include "pk_helpers.hh"
 //#include "MatrixVolumetricDeformation.hh"
 
 namespace Amanzi {
 namespace Deform {
 
-void
-CopyMeshCoordinatesToVector(const AmanziMesh::Mesh& mesh,
-                            CompositeVector& vec);
-
 class VolumetricDeformation : public PK_Physical_Default {
-
  public:
-
   VolumetricDeformation(Teuchos::ParameterList& pk_tree,
                         const Teuchos::RCP<Teuchos::ParameterList>& global_plist,
                         const Teuchos::RCP<State>& S,
@@ -141,6 +138,7 @@ class VolumetricDeformation : public PK_Physical_Default {
 
   // -- Commit any secondary (dependent) variables.
   virtual void CommitStep(double t_old, double t_new, const Tag& tag) override;
+  virtual void FailStep(double t_old, double t_new, const Tag& tag) override;
 
   // -- Update diagnostics for vis.
   virtual void CalculateDiagnostics(const Tag& tag) override {}
@@ -148,16 +146,11 @@ class VolumetricDeformation : public PK_Physical_Default {
   // -- advance via one of a few methods
   virtual bool AdvanceStep(double t_old, double t_new, bool reinit) override;
 
-  virtual double get_dt() override {
-    return dt_max_;
-  }
+  virtual double get_dt() override { return dt_max_; }
 
-  virtual void set_dt(double dt) override {
-    dt_ = dt;
-  }
+  virtual void set_dt(double dt) override {}
 
  private:
-
   // strategy for calculating nodal deformation given change in cell volume
   enum DeformStrategy {
     DEFORM_STRATEGY_GLOBAL_OPTIMIZATION,
@@ -167,11 +160,7 @@ class VolumetricDeformation : public PK_Physical_Default {
   DeformStrategy strategy_;
 
   // strategy for calculating change in cell volume
-  enum DeformMode {
-    DEFORM_MODE_DVDT,
-    DEFORM_MODE_SATURATION,
-    DEFORM_MODE_STRUCTURAL
-  };
+  enum DeformMode { DEFORM_MODE_DVDT, DEFORM_MODE_SATURATION, DEFORM_MODE_STRUCTURAL };
   DeformMode deform_mode_;
   double overpressured_limit_;
 
@@ -190,7 +179,7 @@ class VolumetricDeformation : public PK_Physical_Default {
   double time_scale_, structural_vol_frac_;
 
   // PK timestep control
-  double dt_, dt_max_;
+  double dt_max_;
 
   // meshes
   Key domain_surf_, domain_surf_3d_;
@@ -204,15 +193,15 @@ class VolumetricDeformation : public PK_Physical_Default {
   Key sat_liq_key_, sat_gas_key_, sat_ice_key_;
   Key cv_key_, del_cv_key_;
   Key poro_key_;
-  Key vertex_loc_key_, vertex_loc_surf_key_, vertex_loc_surf3d_key_;
+  Key vertex_loc_key_, vertex_loc_surf3d_key_;
   Key nodal_dz_key_, face_above_dz_key_;
+  bool deformed_this_step_;
 
   // factory registration
   static RegisteredPKFactory<VolumetricDeformation> reg_;
-
 };
 
-} // namespace
-} // namespace
+} // namespace Deform
+} // namespace Amanzi
 
 #endif

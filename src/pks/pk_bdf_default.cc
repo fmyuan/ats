@@ -1,10 +1,14 @@
-/* -*-  mode: c++; indent-tabs-mode: nil -*- */
+/*
+  Copyright 2010-202x held jointly by participating institutions.
+  ATS is released under the three-clause BSD License.
+  The terms of use and "as is" disclaimer for this license are
+  provided in the top-level COPYRIGHT file.
+
+  Authors: Ethan Coon
+*/
 
 /* -------------------------------------------------------------------------
 ATS
-
-License: see $ATS_DIR/COPYRIGHT
-Author: Ethan Coon
 
 Default base with default implementations of methods for a PK integrated using
 BDF.
@@ -21,22 +25,25 @@ namespace Amanzi {
 // -----------------------------------------------------------------------------
 // Setup
 // -----------------------------------------------------------------------------
-void PK_BDF_Default::Setup()
+void
+PK_BDF_Default::Setup()
 {
-  // initial timestep
-  dt_ = plist_->get<double>("initial time step", 1.);
-  dt_ = plist_->get<double>("initial time step [s]", dt_);
-
   // preconditioner assembly
   assemble_preconditioner_ = plist_->get<bool>("assemble preconditioner", true);
+  strongly_coupled_ = plist_->get<bool>("strongly coupled PK", false);
 
-  if (!plist_->get<bool>("strongly coupled PK", false)) {
+
+  if (!strongly_coupled_) {
     Teuchos::ParameterList& bdf_plist = plist_->sublist("time integrator");
-    // -- check if continuation method
+
+    // check if continuation method and require continuation parameter
     // -- ETC Note this needs fixed if more than one continuation method used
     if (bdf_plist.isSublist("continuation parameters")) {
-      S_->Require<double>("continuation_parameter", Tags::DEFAULT, name_);
+      S_->Require<double>("continuation_parameter", Tag(name_), name_);
     }
+
+    // require data for checkpointing timestep size
+    S_->Require<double>("dt_internal", Tag(name_), name_);
   }
 };
 
@@ -44,22 +51,29 @@ void PK_BDF_Default::Setup()
 // -----------------------------------------------------------------------------
 // Initialization of timestepper.
 // -----------------------------------------------------------------------------
-void PK_BDF_Default::Initialize()
+void
+PK_BDF_Default::Initialize()
 {
-  // set up the timestepping algorithm
-  if (!plist_->get<bool>("strongly coupled PK", false)) {
-    // -- instantiate time stepper
+  if (!strongly_coupled_) {
+    // set up the timestepping algorithm
+    // -- construct the time integrator
+    //   Note, this is done here and not in setup because solution is not ready in setup
     Teuchos::ParameterList& bdf_plist = plist_->sublist("time integrator");
-    bdf_plist.set("initial time", S_->get_time());
-    if (!bdf_plist.isSublist("verbose object"))
-      bdf_plist.set("verbose object", plist_->sublist("verbose object"));
-    time_stepper_ = Teuchos::rcp(new BDF1_TI<TreeVector,TreeVectorSpace>(*this,
-            bdf_plist, solution_));
+    bdf_plist.sublist("verbose object")
+      .setParametersNotAlreadySet(plist_->sublist("verbose object"));
+    bdf_plist.sublist("verbose object").set("name", name() + "_TI");
 
-    // initialize continuation parameter if needed.
-    if (bdf_plist.isSublist("continuation parameters")) {
-      S_->GetW<double>("continuation_parameter", Tags::DEFAULT, name_) = 1.;
-      S_->GetRecordW("continuation_parameter", Tags::DEFAULT, name_).set_initialized();
+    time_stepper_ =
+      Teuchos::rcp(new BDF1_TI<TreeVector, TreeVectorSpace>(*this, bdf_plist, solution_, S_));
+
+    double dt_init = time_stepper_->initial_timestep();
+    S_->Assign("dt_internal", Tag(name_), name_, dt_init);
+    S_->GetRecordW("dt_internal", Tag(name_), name_).set_initialized();
+
+    // -- initialize continuation parameter if needed.
+    if (S_->HasRecord("continuation_parameter", Tag(name_))) {
+      S_->Assign("continuation_parameter", Tag(name_), name_, (double)1.);
+      S_->GetRecordW("continuation_parameter", Tag(name_), name_).set_initialized();
     }
 
     // -- initialize time derivative
@@ -71,32 +85,32 @@ void PK_BDF_Default::Initialize()
   }
 };
 
-void PK_BDF_Default::ResetTimeStepper(double time)
-{
-  // -- initialize time derivative
-  auto solution_dot = Teuchos::rcp(new TreeVector(*solution_));
-  solution_dot->PutScalar(0.0);
-
-  // -- set initial state
-  time_stepper_->SetInitialState(time, solution_, solution_dot);
-  return;
-}
 
 // -----------------------------------------------------------------------------
 // Initialization of timestepper.
 // -----------------------------------------------------------------------------
-double PK_BDF_Default::get_dt() { return dt_; }
+double
+PK_BDF_Default::get_dt()
+{
+  if (!strongly_coupled_)
+    return S_->Get<double>("dt_internal", Tag(name_));
+  else
+    return -1.;
+}
 
-void PK_BDF_Default::set_dt(double dt) { dt_ = dt; }
+void
+PK_BDF_Default::set_dt(double dt)
+{
+  if (!strongly_coupled_) S_->Assign("dt_internal", Tag(name_), name_, dt);
+}
 
 // -- Commit any secondary (dependent) variables.
-void PK_BDF_Default::CommitStep(double t_old, double t_new, const Tag& tag) \
+void
+PK_BDF_Default::CommitStep(double t_old, double t_new, const Tag& tag)
 {
-  double dt = t_new - t_old;
-  if (time_stepper_ != Teuchos::null) {
-    if (dt <= 0) {
-      ResetTimeStepper(t_old);
-    } else {
+  if (tag == tag_next_) {
+    double dt = t_new - t_old;
+    if (time_stepper_ != Teuchos::null && dt > 0) {
       time_stepper_->CommitSolution(dt, solution_, true);
     }
   }
@@ -106,9 +120,10 @@ void PK_BDF_Default::CommitStep(double t_old, double t_new, const Tag& tag) \
 // -----------------------------------------------------------------------------
 // Advance from state S to state S_next at time S.time + dt.
 // -----------------------------------------------------------------------------
-bool PK_BDF_Default::AdvanceStep(double t_old, double t_new, bool reinit)
+bool
+PK_BDF_Default::AdvanceStep(double t_old, double t_new, bool reinit)
 {
-  double dt = t_new -t_old;
+  double dt = t_new - t_old;
   Teuchos::OSTab out = vo_->getOSTab();
 
   if (vo_->os_OK(Teuchos::VERB_LOW))
@@ -120,46 +135,69 @@ bool PK_BDF_Default::AdvanceStep(double t_old, double t_new, bool reinit)
   State_to_Solution(Tags::NEXT, *solution_);
 
   // take a bdf timestep
-  double dt_solver;
-  bool fail = time_stepper_->TimeStep(dt, dt_solver, solution_);
+  // Three dts:
+  // --  dt is the requested timestep size.  It must be less than or equal to...
+  // --  dt_internal is the max valid dt, and is set by physics/solvers
+  // --  dt_solver is what the solver wants to do
+  double dt_internal = S_->Get<double>("dt_internal", Tag(name_));
 
-  if (!fail) {
-    // check step validity
-    bool valid = ValidStep();
-    if (valid) {
-      if (vo_->os_OK(Teuchos::VERB_LOW))
-        *vo_->os() << "successful advance" << std::endl;
-      // update the timestep size
-      if (dt_solver < dt_ && dt_solver >= dt) {
-        // We took a smaller step than we recommended, and it worked fine (not
-        // suprisingly).  Likely this was due to constraints from other PKs or
-        // vis.  Do not reduce our recommendation.
+  // NOTE, still a bug in amanzi#685, despite fixes in amanzi#694, so this assertion still fails --ETC
+  // AMANZI_ASSERT(dt <= dt_internal + 2.e-8); // roundoff
+
+  double dt_solver = -1;
+  bool fail = false;
+  try {
+    fail = time_stepper_->TimeStep(dt, dt_solver, solution_);
+
+    if (!fail) {
+      // check step validity
+      bool valid = ValidStep();
+      if (valid) {
+        if (vo_->os_OK(Teuchos::VERB_LOW)) *vo_->os() << "successful advance" << std::endl;
+        // update the timestep size
+        if (dt_solver < dt_internal && dt_solver >= dt) {
+          // We took a smaller step than we recommended, and it worked fine (not
+          // suprisingly).  Likely this was due to constraints from other PKs or
+          // vis.  Do not reduce our recommendation.
+        } else {
+          dt_internal = dt_solver;
+        }
       } else {
-        dt_ = dt_solver;
+        if (vo_->os_OK(Teuchos::VERB_LOW))
+          *vo_->os() << "successful advance, but not valid" << std::endl;
+        time_stepper_->CommitSolution(dt_internal, solution_, valid);
+        dt_internal = 0.5 * dt_internal;
+        // when including Valid here, make fail = true refs #110
       }
     } else {
-      if (vo_->os_OK(Teuchos::VERB_LOW))
-        *vo_->os() << "successful advance, but not valid" << std::endl;
-      time_stepper_->CommitSolution(dt_, solution_, valid);
-      dt_ = 0.5*dt_;
-      // when including Valid here, make fail = true refs #110
+      if (vo_->os_OK(Teuchos::VERB_LOW)) *vo_->os() << "unsuccessful advance" << std::endl;
+      // take the decreased timestep size
+      dt_internal = dt_solver;
     }
-  } else {
-    if (vo_->os_OK(Teuchos::VERB_LOW))
-      *vo_->os() << "unsuccessful advance" << std::endl;
-    // take the decreased timestep size
-    dt_ = dt_solver;
-  }
 
+    S_->Assign("dt_internal", Tag(name_), name_, dt_internal);
+  } catch (Errors::TimeStepCrash& e) {
+    // inject more information into the crash message
+    std::stringstream msg_str;
+    msg_str << "TimeStepCrash in PK: \"" << name() << "\"" << std::endl
+            << "  at t = " << t_old << " with dt = " << dt << std::endl
+            << "  error message: " << std::endl
+            << std::endl
+            << e.what() << std::endl
+            << std::endl;
+    Errors::TimeStepCrash msg(msg_str.str());
+    Exceptions::amanzi_throw(msg);
+  }
   return fail;
 };
 
 
 // update the continuation parameter
-void PK_BDF_Default::UpdateContinuationParameter(double lambda)
+void
+PK_BDF_Default::UpdateContinuationParameter(double lambda)
 {
-  S_->GetW<double>("continuation_parameter", Tags::DEFAULT, name()) = lambda;
+  S_->Assign("continuation_parameter", Tag(name_), name_, lambda);
   ChangedSolution();
 }
 
-} // namespace
+} // namespace Amanzi

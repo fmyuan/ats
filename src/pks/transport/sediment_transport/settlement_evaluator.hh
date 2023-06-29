@@ -1,10 +1,16 @@
-/* -*-  mode: c++; indent-tabs-mode: nil -*- */
+/*
+  Copyright 2010-202x held jointly by participating institutions.
+  ATS is released under the three-clause BSD License.
+  The terms of use and "as is" disclaimer for this license are
+  provided in the top-level COPYRIGHT file.
+
+  Authors: Daniil Svyatsky (dasvyat@lanl.gov)
+*/
 
 /*
   The erosion evaluator gets the erosion rates.
 
 
-  Authors: Daniil Svyatsky (dasvyat@lanl.gov)
 */
 
 #ifndef AMANZI_SETTLEMENTRATE_EVALUATOR_
@@ -19,27 +25,18 @@
 namespace Amanzi {
 
 class SettlementRateEvaluator : public EvaluatorSecondaryMonotypeCV {
-
  public:
-  explicit
-  SettlementRateEvaluator(Teuchos::ParameterList& plist);
-  SettlementRateEvaluator(const SettlementRateEvaluator& other);
-  virtual Teuchos::RCP<Evaluator> Clone() const;
-  
-  // virtual void EvaluateElevationAndSlope_(const Teuchos::Ptr<State>& S,
-  //         const std::vector<Teuchos::Ptr<CompositeVector> >& results) = 0;
+  explicit SettlementRateEvaluator(Teuchos::ParameterList& plist);
+  SettlementRateEvaluator(const SettlementRateEvaluator& other) = default;
+  virtual Teuchos::RCP<Evaluator> Clone() const override;
 
-  // virtual bool HasFieldChanged(const Teuchos::Ptr<State>& S, Key request);
-
-  //virtual void EnsureCompatibility(const Teuchos::Ptr<State>& S){};
-
-protected:
-
-    // Required methods from EvaluatorSecondaryMonotypeCV
-  virtual void Evaluate_(const State& S,
-          const std::vector<CompositeVector*>& result) override;
+ protected:
+  // Required methods from EvaluatorSecondaryMonotypeCV
+  virtual void Evaluate_(const State& S, const std::vector<CompositeVector*>& result) override;
   virtual void EvaluatePartialDerivative_(const State& S,
-          const Key& wrt_key, const Tag& wrt_tag, const std::vector<CompositeVector*>& result) override;
+                                          const Key& wrt_key,
+                                          const Tag& wrt_tag,
+                                          const std::vector<CompositeVector*>& result) override;
 
   double tau_d_;
   double ws_;
@@ -49,10 +46,9 @@ protected:
   double Cf_;
   Key velocity_key_, sediment_key_;
 
-  static Utils::RegisteredFactory<Evaluator,SettlementRateEvaluator> factory_;
-
+  static Utils::RegisteredFactory<Evaluator, SettlementRateEvaluator> factory_;
 };
 
-} //namespace
+} // namespace Amanzi
 
 #endif

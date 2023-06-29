@@ -10,6 +10,8 @@ set(ats_generic_evals_src_files
     SubgridDisaggregateEvaluator.cc
     SubgridAggregateEvaluator.cc
     TimeMaxEvaluator.cc
+    ExtractionEvaluator.cc
+    InitialTimeEvaluator.cc
    )
 
 file(GLOB ats_generic_evals_inc_files "*.hh")

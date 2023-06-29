@@ -1,14 +1,15 @@
-/* -*-  mode: c++; indent-tabs-mode: nil -*- */
 /*
-  Amanzi is released under the three-clause BSD License.
+  Copyright 2010-202x held jointly by participating institutions.
+  ATS is released under the three-clause BSD License.
   The terms of use and "as is" disclaimer for this license are
   provided in the top-level COPYRIGHT file.
 
-  Author: Ethan Coon (ecoon@ornl.gov)
+  Authors: Ethan Coon (ecoon@ornl.gov)
 */
 
 //! A set of helper functions for doing common things in PKs.
 #include "Mesh_Algorithms.hh"
+#include "Chemistry_PK.hh"
 #include "pk_helpers.hh"
 
 namespace Amanzi {
@@ -26,64 +27,15 @@ aliasVector(State& S, const Key& key, const Tag& target, const Tag& alias)
 
 
 // -----------------------------------------------------------------------------
-// Propagates density metadata to State when EOS basis is 'both' and the
-// alternate density is undefined. Require density and evaluator if needed.
-// -----------------------------------------------------------------------------
-void
-requireDensityEvaluator(const Key& dens_key, const Tag& tag,
-                 Teuchos::ParameterList& plist, State& S)
-{
-  Key mass_dens_key, molar_dens_key;
-  Key domain = Keys::getDomain(dens_key);
-
-  auto type_pos = dens_key.find("_density_");
-  auto dens_type = dens_key.substr(type_pos+9, dens_key.size());
-
-  auto molar_pos = dens_key.find("molar");
-  auto mass_pos = dens_key.find("mass");
-  if (molar_pos != std::string::npos) {
-    molar_dens_key = dens_key;
-    mass_dens_key = dens_key.substr(0,molar_pos)+"mass"+dens_key.substr(molar_pos+5, dens_key.size());
-    mass_dens_key = Keys::readKey(plist, domain, "mass density "+dens_type, mass_dens_key);
-  } else if (mass_pos != std::string::npos) {
-    mass_dens_key = dens_key;
-    molar_dens_key = dens_key.substr(0,mass_pos)+"molar"+dens_key.substr(mass_pos+4, dens_key.size());
-    molar_dens_key = Keys::readKey(plist, domain, "molar density "+dens_type, molar_dens_key);
-  } else {
-    Errors::Message msg("requireDensityEvaluator: string 'molar' or 'mass' not found in density key.");
-    Exceptions::amanzi_throw(msg);
-  }
-
-  auto need_metadata = [&S] (const Key& key1, const Key& key2) {
-    return (!S.HasEvaluatorList(key2) && S.HasEvaluatorList(key1) &&
-            S.GetEvaluatorList(key1).get<std::string>("EOS basis") == "both");
-  };
-
-  if (need_metadata(molar_dens_key, mass_dens_key)) {
-    auto& mass_dens_list = S.GetEvaluatorList(mass_dens_key);
-    mass_dens_list.setParameters(S.GetEvaluatorList(molar_dens_key));
-  } else if (need_metadata(mass_dens_key, molar_dens_key)) {
-    auto& molar_dens_list = S.GetEvaluatorList(molar_dens_key);
-    molar_dens_list.setParameters(S.GetEvaluatorList(mass_dens_key));
-  }
-
-  if (S.HasEvaluatorList(molar_dens_key)) S.RequireEvaluator(molar_dens_key, tag);
-  if (S.HasEvaluatorList(mass_dens_key)) S.RequireEvaluator(mass_dens_key, tag);
-}
-
-
-// -----------------------------------------------------------------------------
 // Given a vector, apply the Dirichlet data to that vector.
 // -----------------------------------------------------------------------------
 void
 applyDirichletBCs(const Operators::BCs& bcs, CompositeVector& u)
 {
   if (u.HasComponent("face")) {
-    Epetra_MultiVector& u_f = *u.ViewComponent("face",false);
-    for (unsigned int f=0; f!=u_f.MyLength(); ++f) {
-      if (bcs.bc_model()[f] == Operators::OPERATOR_BC_DIRICHLET) {
-        u_f[0][f] = bcs.bc_value()[f];
-      }
+    Epetra_MultiVector& u_f = *u.ViewComponent("face", false);
+    for (unsigned int f = 0; f != u_f.MyLength(); ++f) {
+      if (bcs.bc_model()[f] == Operators::OPERATOR_BC_DIRICHLET) { u_f[0][f] = bcs.bc_value()[f]; }
     }
   }
 
@@ -93,7 +45,7 @@ applyDirichletBCs(const Operators::BCs& bcs, CompositeVector& u)
     const Epetra_Map& vandalay_map = u.Mesh()->exterior_face_map(false);
     const Epetra_Map& face_map = u.Mesh()->face_map(false);
 
-    for (int bf=0; bf!=u_bf.MyLength(); ++bf) {
+    for (int bf = 0; bf != u_bf.MyLength(); ++bf) {
       AmanziMesh::Entity_ID f = face_map.LID(vandalay_map.GID(bf));
       if (bcs.bc_model()[f] == Operators::OPERATOR_BC_DIRICHLET) {
         u_bf[0][bf] = bcs.bc_value()[f];
@@ -116,15 +68,15 @@ double
 getFaceOnBoundaryValue(AmanziMesh::Entity_ID f, const CompositeVector& u, const Operators::BCs& bcs)
 {
   if (u.HasComponent("face")) {
-    return (*u.ViewComponent("face",false))[0][f];
+    return (*u.ViewComponent("face", false))[0][f];
   } else if (bcs.bc_model()[f] == Operators::OPERATOR_BC_DIRICHLET) {
     return bcs.bc_value()[f];
-  // } else if (u.HasComponent("boundary_face")) {
-  //   AmanziMesh::Entity_ID bf = getFaceOnBoundaryBoundaryFace(*u.Mesh(), f);
-  //   return (*u.ViewComponent("boundary_face",false))[0][bf];
+    // } else if (u.HasComponent("boundary_face")) {
+    //   AmanziMesh::Entity_ID bf = getFaceOnBoundaryBoundaryFace(*u.Mesh(), f);
+    //   return (*u.ViewComponent("boundary_face",false))[0][bf];
   } else {
-    auto c = getFaceOnBoundaryInternalCell(*u.Mesh(),f);
-    return (*u.ViewComponent("cell",false))[0][c];
+    auto c = getFaceOnBoundaryInternalCell(*u.Mesh(), f);
+    return (*u.ViewComponent("cell", false))[0][c];
   }
   return -1;
 }
@@ -150,18 +102,16 @@ getBoundaryDirection(const AmanziMesh::Mesh& mesh, AmanziMesh::Entity_ID f)
 // Get a primary variable evaluator for a key at tag
 // -----------------------------------------------------------------------------
 Teuchos::RCP<EvaluatorPrimaryCV>
-RequireEvaluatorPrimary(const Key& key, const Tag& tag, State& S)
+requireEvaluatorPrimary(const Key& key, const Tag& tag, State& S, bool or_die)
 {
   // first check, is there one already
   if (S.HasEvaluator(key, tag)) {
     // if so, make sure it is primary
     Teuchos::RCP<Evaluator> eval = S.GetEvaluatorPtr(key, tag);
-    Teuchos::RCP<EvaluatorPrimaryCV> eval_pv =
-      Teuchos::rcp_dynamic_cast<EvaluatorPrimaryCV>(eval);
-    if (eval_pv == Teuchos::null) {
+    Teuchos::RCP<EvaluatorPrimaryCV> eval_pv = Teuchos::rcp_dynamic_cast<EvaluatorPrimaryCV>(eval);
+    if (or_die && eval_pv == Teuchos::null) {
       Errors::Message msg;
-      msg << "Expected primary variable evaluator for "
-          << key << " @ " << tag.get();
+      msg << "Expected primary variable evaluator for " << key << " @ " << tag.get();
       Exceptions::amanzi_throw(msg);
     }
     return eval_pv;
@@ -184,20 +134,211 @@ RequireEvaluatorPrimary(const Key& key, const Tag& tag, State& S)
 // -----------------------------------------------------------------------------
 // Marks a primary evaluator as changed.
 // -----------------------------------------------------------------------------
-void
-ChangedEvaluatorPrimary(const Key& key, const Tag& tag, State& S)
+bool
+changedEvaluatorPrimary(const Key& key, const Tag& tag, State& S, bool or_die)
 {
+  bool changed = false;
   Teuchos::RCP<Evaluator> eval = S.GetEvaluatorPtr(key, tag);
-  Teuchos::RCP<EvaluatorPrimaryCV> eval_pv =
-    Teuchos::rcp_dynamic_cast<EvaluatorPrimaryCV>(eval);
+  Teuchos::RCP<EvaluatorPrimaryCV> eval_pv = Teuchos::rcp_dynamic_cast<EvaluatorPrimaryCV>(eval);
   if (eval_pv == Teuchos::null) {
-    Errors::Message msg;
-    msg << "Expected primary variable evaluator for "
-        << key << " @ " << tag.get();
-    Exceptions::amanzi_throw(msg);
+    if (or_die) {
+      Errors::Message msg;
+      msg << "Expected primary variable evaluator for " << key << " @ " << tag.get();
+      Exceptions::amanzi_throw(msg);
+    }
+  } else {
+    eval_pv->SetChanged();
+    changed = true;
   }
-  eval_pv->SetChanged();
+  return changed;
 }
 
+
+// -----------------------------------------------------------------------------
+// Require a vector and a primary variable evaluator at current tag(s).
+// -----------------------------------------------------------------------------
+CompositeVectorSpace&
+requireAtCurrent(const Key& key, const Tag& tag, State& S, const Key& name, bool is_eval)
+{
+  CompositeVectorSpace& cvs = S.Require<CompositeVector, CompositeVectorSpace>(key, tag);
+  if (!name.empty()) {
+    Key owner = S.GetRecord(key, tag).owner();
+    if (owner.empty()) {
+      S.Require<CompositeVector, CompositeVectorSpace>(key, tag, name);
+      if (is_eval) requireEvaluatorAssign(key, tag, S);
+    }
+
+    if (tag != Tags::CURRENT) {
+      S.Require<CompositeVector, CompositeVectorSpace>(key, Tags::CURRENT);
+      Key current_owner = S.GetRecord(key, Tags::CURRENT).owner();
+      if (owner.empty()) {
+        S.Require<CompositeVector, CompositeVectorSpace>(key, Tags::CURRENT, name);
+        if (is_eval) requireEvaluatorAssign(key, Tags::CURRENT, S);
+      }
+    }
+  } else {
+    if (is_eval) S.RequireEvaluator(key, tag);
+  }
+  return cvs;
+}
+
+
+// -----------------------------------------------------------------------------
+// Require a vector and a primary variable evaluator at next tag(s).
+// -----------------------------------------------------------------------------
+CompositeVectorSpace&
+requireAtNext(const Key& key, const Tag& tag, State& S, const Key& name)
+{
+  CompositeVectorSpace& cvs = S.Require<CompositeVector, CompositeVectorSpace>(key, tag);
+  if (!name.empty()) {
+    S.Require<CompositeVector, CompositeVectorSpace>(key, tag, name);
+    requireEvaluatorPrimary(key, tag, S);
+  } else {
+    S.RequireEvaluator(key, tag);
+  }
+
+  if (tag != Tags::NEXT) { aliasVector(S, key, tag, Tags::NEXT); }
+  return cvs;
+}
+
+
+// -----------------------------------------------------------------------------
+// Require assignment evaluator, which allows tracking old data.
+// -----------------------------------------------------------------------------
+Teuchos::RCP<EvaluatorPrimaryCV>
+requireEvaluatorAssign(const Key& key, const Tag& tag, State& S)
+{
+  // in the future, this will likely derive from primary instead of just being
+  // primary.  This will allow confirming that the times are the same.
+  return requireEvaluatorPrimary(key, tag, S, false);
+}
+
+// -----------------------------------------------------------------------------
+// Assign if it is an assignment evaluator.
+// -----------------------------------------------------------------------------
+void
+assign(const Key& key, const Tag& tag_dest, const Tag& tag_source, State& S)
+{
+  S.GetEvaluator(key, tag_source).Update(S, Keys::getKey(key, tag_dest));
+  bool changed = changedEvaluatorPrimary(key, tag_dest, S, false);
+  if (changed) S.Assign(key, tag_dest, tag_source);
+}
+
+
+// -----------------------------------------------------------------------------
+// Helper functions for working with Amanzi's Chemistry PK
+// -----------------------------------------------------------------------------
+void
+convertConcentrationToAmanzi(const Epetra_MultiVector& mol_dens,
+                             int num_aqueous,
+                             const Epetra_MultiVector& tcc_ats,
+                             Epetra_MultiVector& tcc_amanzi)
+{
+  // convert from mole fraction [mol C / mol H20] to [mol C / L]
+  for (int k = 0; k != num_aqueous; ++k) {
+    for (int c = 0; c != tcc_ats.MyLength(); ++c) {
+      // 1.e-3 converts L to m^3
+      tcc_amanzi[k][c] = tcc_ats[k][c] * mol_dens[0][c] * 1.e-3;
+    }
+  }
+}
+
+
+void
+convertConcentrationToATS(const Epetra_MultiVector& mol_dens,
+                          int num_aqueous,
+                          const Epetra_MultiVector& tcc_amanzi,
+                          Epetra_MultiVector& tcc_ats)
+{
+  // convert from [mol C / L] to mol fraction [mol C / mol H20]
+  for (int k = 0; k != num_aqueous; ++k) {
+    for (int c = 0; c != tcc_amanzi.MyLength(); ++c) {
+      tcc_ats[k][c] = tcc_amanzi[k][c] / (mol_dens[0][c] * 1.e-3);
+    }
+  }
+}
+
+
+bool
+advanceChemistry(Teuchos::RCP<AmanziChemistry::Chemistry_PK> chem_pk,
+                 double t_old,
+                 double t_new,
+                 bool reinit,
+                 const Epetra_MultiVector& mol_dens,
+                 Teuchos::RCP<Epetra_MultiVector> tcc,
+                 Teuchos::Time& timer)
+{
+  bool fail = false;
+  int num_aqueous = chem_pk->num_aqueous_components();
+  convertConcentrationToAmanzi(mol_dens, num_aqueous, *tcc, *tcc);
+  chem_pk->set_aqueous_components(tcc);
+
+  {
+    auto monitor = Teuchos::rcp(new Teuchos::TimeMonitor(timer));
+    fail = chem_pk->AdvanceStep(t_old, t_new, reinit);
+  }
+  if (fail) return fail;
+
+  *tcc = *chem_pk->aqueous_components();
+  convertConcentrationToATS(mol_dens, num_aqueous, *tcc, *tcc);
+  return fail;
+}
+
+
+void
+copyMeshCoordinatesToVector(const AmanziMesh::Mesh& mesh, CompositeVector& vec)
+{
+  Epetra_MultiVector& nodes = *vec.ViewComponent("node", true);
+
+  int ndim = mesh.space_dimension();
+  AmanziGeometry::Point nc;
+  for (int i = 0; i != nodes.MyLength(); ++i) {
+    mesh.node_get_coordinates(i, &nc);
+    for (int j = 0; j != ndim; ++j) nodes[j][i] = nc[j];
+  }
+}
+
+void
+copyVectorToMeshCoordinates(const CompositeVector& vec, AmanziMesh::Mesh& mesh)
+{
+  const Epetra_MultiVector& nodes = *vec.ViewComponent("node", true);
+  int ndim = mesh.space_dimension();
+
+  std::vector<int> node_ids(nodes.MyLength());
+  Amanzi::AmanziGeometry::Point_List new_positions(nodes.MyLength());
+  for (int n = 0; n != nodes.MyLength(); ++n) {
+    node_ids[n] = n;
+    if (mesh.space_dimension() == 2) {
+      new_positions[n] = Amanzi::AmanziGeometry::Point{ nodes[0][n], nodes[1][n] };
+    } else {
+      new_positions[n] = Amanzi::AmanziGeometry::Point{ nodes[0][n], nodes[1][n], nodes[2][n] };
+    }
+  }
+  mesh.deform(node_ids, new_positions);
+}
+
+int
+commMaxValLoc(const Comm_type& comm, const ValLoc& local, ValLoc& global)
+{
+  MpiComm_type const* mpi_comm = dynamic_cast<const MpiComm_type*>(&comm);
+  const MPI_Comm& mpi_comm_raw = mpi_comm->Comm();
+  return MPI_Allreduce(&local, &global, 1, MPI_DOUBLE_INT, MPI_MAXLOC, mpi_comm_raw);
+}
+
+ValLoc
+maxValLoc(const Epetra_Vector& vec)
+{
+  ValLoc local{ 0., 0 };
+  for (int i = 0; i != vec.MyLength(); ++i) {
+    if (vec[i] > local.value) {
+      local.value = vec[i];
+      local.gid = vec.Map().GID(i);
+    }
+  }
+  ValLoc global{ 0., 0 };
+  int ierr = commMaxValLoc(vec.Comm(), local, global);
+  AMANZI_ASSERT(!ierr);
+  return global;
+}
 
 } // namespace Amanzi

@@ -1,16 +1,19 @@
 /*
-  Transport PK
-
-  Copyright 2010-201x held jointly by LANS/LANL, LBNL, and PNNL.
-  Amanzi is released under the three-clause BSD License.
+  Copyright 2010-202x held jointly by participating institutions.
+  ATS is released under the three-clause BSD License.
   The terms of use and "as is" disclaimer for this license are
   provided in the top-level COPYRIGHT file.
 
-  Author: Konstantin Lipnikov (lipnikov@lanl.gov)
+  Authors: Konstantin Lipnikov (lipnikov@lanl.gov)
+*/
+
+/*
+  Transport PK
+
 */
 
 
-/*
+/*!
 
 The advection-diffusion equation for component *i* in partially saturated porous media may be written as
 
@@ -34,13 +37,13 @@ The advection-diffusion equation for component *i* in the surface may be written
     * `"PK type`" ``[string]`` **"transport ats"**
 
     * `"domain name`" ``[string]`` **domain** specifies mesh name that defines
-       the domain of this PK.
+      the domain of this PK.
 
-    * `"number of liquid components`" ``[int]`` is the number of liquid components.
+    * `"component names`" ``[Array(string)]`` No default. Provides the names of the
+      components that will be transported. Must be in the order: aqueous, gaseous, solid.
 
     * `"number of aqueous components`" ``[int]`` **-1** The total number of
-      aqueous components.  Default value is the total number of liquid
-      components.
+      aqueous components.  Default value is the length of `"component names`"
 
     * `"number of gaseous components`" ``[int]`` **0** The total number of
       gaseous components.
@@ -48,9 +51,6 @@ The advection-diffusion equation for component *i* in the surface may be written
     * `"boundary conditions`" ``[transport-bc-spec]`` Boundary conditions for
       transport are dependent on the boundary conditions for flow. See
       `Flow-specific Boundary Conditions`_ and `Transport-specific Boundary Conditions`_
-
-    * `"component names`" ``[Array(string)]`` No default. Provides the names of the
-      components that will be transported.
 
     * `"component molar masses`" ``[Array(double)]`` No default. Molar mass of
       each component.
@@ -63,22 +63,13 @@ The advection-diffusion equation for component *i* in the surface may be written
 
     Source terms:
 
-    * `"source terms`" [list] Provides solute source.
-       * `"component mass source`" [list]  Defines solute source injection rate.
-          * `"spatial distribution method`" [string] One of:
-             - `"volume`", source is considered as extensive quantity [molC s^-1] and is evenly distributed across the region.
-             - `"none`", source is considered as intensive quantity. [molC m^-2 s^-1] in surface and [molC m^-3 s^-1] in subsurface
-
-       * `"geochemical`" [list]  Defines a source by setting solute concentration for all components (in moles/L) and an injection
-           rate given by the water source.  Currently, this option is only available for Alquimia provided geochemical conditions.
-
-           - `"geochemical conditions`" [Array(string)] List of geochemical constraints providing concentration for solute injection.
+    * `"source terms`" [transport-source-spec-list] Provides solute source.
 
     Physical model and assumptions:
 
-    * `"physical models and assumptions`" [list] Defines material properties.
+    * `"physical models and assumptions`" [material-properties-spec] Defines material properties.
 
-      * `"effective transport porosity`" [bool] If *true*, effective transport porosity
+    * `"effective transport porosity`" [bool] If *true*, effective transport porosity
       will be used by dispersive-diffusive fluxes instead of total porosity.
       Default is *false*.
 
@@ -106,8 +97,8 @@ The advection-diffusion equation for component *i* in the surface may be written
     * `"reconstruction`" [list] collects reconstruction parameters. The available options are
       describe in the separate section below.
 
-    * `"transport subcycling`" ``[bool]`` **true** The code will default to subcycling for transport within
-      the master PK if there is one.
+    * `"transport subcycling`" ``[bool]`` **true** The code will default to
+      subcycling for transport within the master PK if there is one.
 
 
     Developer parameters:
@@ -154,18 +145,18 @@ The advection-diffusion equation for component *i* in the surface may be written
       The injection rate of a solute [molC s^-1], when given as the product of
       a concentration and a water source, is evaluated as:
 
-          Concentration [mol C L^-1] *
-            1000 [L m^-3] of water *
-            water source [mol H2O m^-3 s^-1] *
-            volume of injection domain [m^3] /
-            molar density of water [mol H2O m^-3]
+      Concentration [mol C L^-1] *
+        1000 [L m^-3] of water *
+        water source [mol H2O m^-3 s^-1] *
+        volume of injection domain [m^3] /
+        molar density of water [mol H2O m^-3]
 
 
 .. _molecular-diffusion-spec:
 .. admonition:: molecular-diffusion-spec
 
    * `"aqueous names`" ``[Array(string)]`` List of aqueous component names to
-      be diffused.
+     be diffused.
    * `"aqueous values`" ``[Array(string)]`` Diffusivities of each component.
 
 
@@ -182,62 +173,78 @@ The advection-diffusion equation for component *i* in the surface may be written
 
    * `"region`" ``[Array(string)]`` Defines geometric regions for material SOIL.
 
-   * `"model`" ``[string]`` **scalar** Defines dispersivity model.  Valid:
-      `"scalar`", `"Bear`", `"Burnett-Frind`", or `"Lichtner-Kelkar-Robinson`".
+   * `"model`" ``[string]`` **scalar** Defines dispersivity model.  One of:
 
-   * `"parameters for MODEL`" [list] where `"MODEL`" is the model name.
+     - `"scalar`" : scalar dispersivity
+     - `"Bear`" : dispersion split into along- and across- velocity
+     - `"Burnett-Frind`"
+     - `"Lichtner-Kelkar-Robinson`"
+
+   * `"parameters for MODEL`" ``[list]`` where `"MODEL`" is the model name.
 
    IF model == scalar
 
    ONE OF
 
-   * `"alpha`" [double] defines dispersivity in all directions, [m].
+   * `"alpha`" ``[double]`` defines dispersivity in all directions, [m].
 
    OR
 
-   * `"dispersion coefficient`" [double] defines dispersion coefficient [m^2 s^-1].
+   * `"dispersion coefficient`" ``[double]`` defines dispersion coefficient [m^2 s^-1].
 
    END
 
    ELSE IF model == Bear
 
-   * `"alpha_l`" [double] defines dispersion in the direction of Darcy velocity, [m].
-   * `"alpha_t`" [double] defines dispersion in the orthogonal direction, [m].
+   * `"alpha_l`" ``[double]`` defines dispersion in the direction of Darcy velocity, [m].
+   * `"alpha_t`" ``[double]`` defines dispersion in the orthogonal direction, [m].
 
    ELSE IF model == Burnett-Frind
 
-   * `"alphaL`" [double] defines the longitudinal dispersion in the direction
+   * `"alphaL`" ``[double]`` defines the longitudinal dispersion in the direction
      of Darcy velocity, [m].
-   * `"alpha_th`" [double] Defines the transverse dispersion in the horizonla
+   * `"alpha_th`" ``[double]`` Defines the transverse dispersion in the horizonal
      direction orthogonal directions, [m].
-   * `"alpha_tv`" [double] Defines dispersion in the orthogonal directions,
-      [m].  When `"alpha_th`" equals to `"alpha_tv`", we obtain dispersion in
-      the direction of the Darcy velocity.  This and the above parameters must
-      be defined for `"Burnett-Frind`" and `"Lichtner-Kelkar-Robinson`" models.
+   * `"alpha_tv`" ``[double]`` Defines dispersion in the orthogonal directions,
+     [m].  When `"alpha_th`" equals to `"alpha_tv`", we obtain dispersion in
+     the direction of the Darcy velocity.
 
-   ELSE IF model == `"Lichtner-Kelker-Robinson`"
+   ELSE IF model == Lichtner-Kelker-Robinson
 
-   * `"alpha_lh`" [double] defines the longitudinal dispersion in the
-      horizontal direction, [m].
-
-   * `"alpha_lv`" [double] Defines the longitudinal dispersion in the vertical
-      direction, [m].  When `"alpha_lh`" equals to `"alpha_lv`", we obtain
-      dispersion in the direction of the Darcy velocity.
-
-   * `"alpha_th`" [double] Defines the transverse dispersion in the horizontal
-      direction orthogonal directions, [m].
-
-   * `"alpha_tv" [double] Defines dispersion in the orthogonal directions.
-      When `"alpha_th`" equals to `"alpha_tv`", we obtain dispersion in the
-      direction of the Darcy velocity.
+   * `"alpha_lh`" ``[double]`` defines the longitudinal dispersion in the
+     horizontal direction, [m].
+   * `"alpha_lv`" ``[double]`` Defines the longitudinal dispersion in the vertical
+     direction, [m].  When `"alpha_lh`" equals to `"alpha_lv`", we obtain
+     dispersion in the direction of the Darcy velocity.
+   * `"alpha_th`" ``[double]`` Defines the transverse dispersion in the horizontal
+     direction orthogonal directions, [m].
+   * `"alpha_tv" ``[double]`` Defines dispersion in the orthogonal directions.
+     When `"alpha_th`" equals to `"alpha_tv`", we obtain dispersion in the
+     direction of the Darcy velocity.
 
    END
 
-   * `"aqueous tortuosity`" [double] Defines tortuosity for calculating
-      diffusivity of liquid solutes, [-].
+   * `"aqueous tortuosity`" ``[double]`` Defines tortuosity for calculating
+     diffusivity of liquid solutes, [-].
 
-   * `"gaseous tortuosity`" [double] Defines tortuosity for calculating
-      diffusivity of gas solutes, [-].
+   * `"gaseous tortuosity`" ``[double]`` Defines tortuosity for calculating
+     diffusivity of gas solutes, [-].
+
+
+.. _transport-source-spec:
+.. admonition:: transport-source-spec
+
+   * `"component mass source`" ``[list]``  Defines solute source injection rate.
+
+     * `"spatial distribution method`" ``[string]`` One of:
+
+        - `"volume`", source is considered as extensive quantity [molC s^-1] and is evenly distributed across the region.
+        - `"none`", source is considered as intensive quantity. [molC m^-2 s^-1] in surface and [molC m^-3 s^-1] in subsurface
+
+     * `"geochemical`" ``[list]``  Defines a source by setting solute concentration for all components (in moles/L) and an injection
+       rate given by the water source.  Currently, this option is only available for Alquimia provided geochemical conditions.
+
+       - `"geochemical conditions`" ``[Array(string)]`` List of geochemical constraints providing concentration for solute injection.
 
 */
 
@@ -269,8 +276,8 @@ The advection-diffusion equation for component *i* in the surface may be written
 #include <string>
 
 #ifdef ALQUIMIA_ENABLED
-#include "Alquimia_PK.hh"
-#include "ChemistryEngine.hh"
+#  include "Alquimia_PK.hh"
+#  include "ChemistryEngine.hh"
 #endif
 
 // Transport
@@ -292,12 +299,12 @@ The advection-diffusion equation for component *i* in the surface may be written
 namespace Amanzi {
 namespace Transport {
 
-typedef double AnalyticFunction(const AmanziGeometry::Point&, const double);
+typedef double
+AnalyticFunction(const AmanziGeometry::Point&, const double);
 
 // ummm -- why does this not use TreeVector? --ETC
 class Transport_ATS : public PK_PhysicalExplicit<Epetra_Vector> {
-
-public:
+ public:
   Transport_ATS(Teuchos::ParameterList& pk_tree,
                 const Teuchos::RCP<Teuchos::ParameterList>& glist,
                 const Teuchos::RCP<State>& S,
@@ -315,18 +322,18 @@ public:
   virtual void Initialize() override;
 
   virtual double get_dt() override;
-  virtual void set_dt(double dt) override {};
+  virtual void set_dt(double dt) override{};
   virtual void set_tags(const Tag& current, const Tag& next) override;
 
-  virtual bool AdvanceStep(double t_old, double t_new, bool reinit=false) override;
+  virtual bool AdvanceStep(double t_old, double t_new, bool reinit = false) override;
   virtual void CommitStep(double t_old, double t_new, const Tag& tag) override;
-  virtual void CalculateDiagnostics(const Tag& tag) override {};
+  virtual void CalculateDiagnostics(const Tag& tag) override{};
 
   // main transport members
   // -- calculation of a stable time step needs saturations and darcy flux
   double StableTimeStep();
-  void Sinks2TotalOutFlux(Epetra_MultiVector& tcc,
-                          std::vector<double>& total_outflux, int n0, int n1);
+  void
+  Sinks2TotalOutFlux(Epetra_MultiVector& tcc, std::vector<double>& total_outflux, int n0, int n1);
 
   // coupling with chemistry
 #ifdef ALQUIMIA_ENABLED
@@ -344,8 +351,11 @@ public:
   void Policy(const Tag& tag);
 
   void VV_CheckGEDproperty(Epetra_MultiVector& tracer) const;
-  void VV_CheckTracerBounds(Epetra_MultiVector& tracer, int component,
-                            double lower_bound, double upper_bound, double tol = 0.0) const;
+  void VV_CheckTracerBounds(Epetra_MultiVector& tracer,
+                            int component,
+                            double lower_bound,
+                            double upper_bound,
+                            double tol = 0.0) const;
   void VV_CheckInfluxBC() const;
   void VV_PrintSoluteExtrema(const Epetra_MultiVector& tcc_next, double dT_MPC);
   double VV_SoluteVolumeChangePerSecond(int idx_solute);
@@ -360,13 +370,12 @@ public:
   void CalculateLpErrors(AnalyticFunction f, double t, Epetra_Vector* sol, double* L1, double* L2);
 
   // -- sources and sinks for components from n0 to n1 including
-  void ComputeAddSourceTerms(double tp, double dtp,
-                             Epetra_MultiVector& tcc, int n0, int n1);
+  void ComputeAddSourceTerms(double tp, double dtp, Epetra_MultiVector& tcc, int n0, int n1);
 
   // void MixingSolutesWthSources(double told, double tnew);
 
-  bool PopulateBoundaryData(std::vector<int>& bc_model,
-                            std::vector<double>& bc_value, int component);
+  bool
+  PopulateBoundaryData(std::vector<int>& bc_model, std::vector<double>& bc_value, int component);
 
   // -- limiters
   void LimiterBarthJespersen(const int component,
@@ -374,12 +383,12 @@ public:
                              Teuchos::RCP<CompositeVector>& gradient,
                              Teuchos::RCP<Epetra_Vector>& limiter);
 
-  const std::vector<std::string> get_component_names(){return component_names_;};
-  int get_num_aqueous_component() {return num_aqueous;};
-  int get_num_gaseous_component() {return num_gaseous;};
+  const std::vector<std::string> get_component_names() { return component_names_; };
+  int get_num_aqueous_component() { return num_aqueous; };
+  int get_num_gaseous_component() { return num_gaseous; };
 
 
-private:
+ private:
   void InitializeFields_();
 
   // advection members
@@ -390,27 +399,34 @@ private:
   void Advance_Dispersion_Diffusion(double t_old, double t_new);
 
   // time integration members
-  void FunctionalTimeDerivative(const double t, const Epetra_Vector& component, Epetra_Vector& f_component) override;
+  void FunctionalTimeDerivative(const double t,
+                                const Epetra_Vector& component,
+                                Epetra_Vector& f_component) override;
   //  void FunctionalTimeDerivative(const double t, const Epetra_Vector& component, TreeVector& f_component);
 
   void IdentifyUpwindCells();
 
-  void InterpolateCellVector(
-    const Epetra_MultiVector& v0, const Epetra_MultiVector& v1,
-    double dT_int, double dT, Epetra_MultiVector& v_int);
+  void InterpolateCellVector(const Epetra_MultiVector& v0,
+                             const Epetra_MultiVector& v1,
+                             double dT_int,
+                             double dT,
+                             Epetra_MultiVector& v_int);
 
   const Teuchos::RCP<Epetra_IntVector>& get_upwind_cell() { return upwind_cell_; }
   const Teuchos::RCP<Epetra_IntVector>& get_downwind_cell() { return downwind_cell_; }
 
   // physical models
   // -- dispersion and diffusion
-  void CalculateDispersionTensor_(
-    const Epetra_MultiVector& darcy_flux, const Epetra_MultiVector& porosity,
-    const Epetra_MultiVector& saturation, const Epetra_MultiVector& mol_density);
+  void CalculateDispersionTensor_(const Epetra_MultiVector& darcy_flux,
+                                  const Epetra_MultiVector& porosity,
+                                  const Epetra_MultiVector& saturation,
+                                  const Epetra_MultiVector& mol_density);
 
-  void CalculateDiffusionTensor_(
-    double md, int phase, const Epetra_MultiVector& porosity,
-    const Epetra_MultiVector& saturation, const Epetra_MultiVector& mol_density);
+  void CalculateDiffusionTensor_(double md,
+                                 int phase,
+                                 const Epetra_MultiVector& porosity,
+                                 const Epetra_MultiVector& saturation,
+                                 const Epetra_MultiVector& mol_density);
 
   int FindDiffusionValue(const std::string& tcc_name, double* md, int* phase);
 
@@ -426,26 +442,29 @@ private:
 
   // initialization methods
   void InitializeAll_();
-  void InitializeFieldFromField_(const Key& field0, const Tag& tag0,
-          const Key& field1, const Tag& tag1,
-          bool call_evaluator, bool overwrite);
+  void InitializeFieldFromField_(const Key& field0,
+                                 const Tag& tag0,
+                                 const Key& field1,
+                                 const Tag& tag1,
+                                 bool call_evaluator,
+                                 bool overwrite);
 
   // miscaleneous methods
   int FindComponentNumber(const std::string component_name);
 
   void ComputeVolumeDarcyFlux(Teuchos::RCP<const Epetra_MultiVector> flux,
-          Teuchos::RCP<const Epetra_MultiVector> mol_den,
-          Teuchos::RCP<Epetra_MultiVector>& vol_darcy_flux);
+                              Teuchos::RCP<const Epetra_MultiVector> mol_den,
+                              Teuchos::RCP<Epetra_MultiVector>& vol_darcy_flux);
 
-public:
-  int MyPID;  // parallel information: will be moved to private
+ public:
+  int MyPID; // parallel information: will be moved to private
   int spatial_disc_order, temporal_disc_order, limiter_model;
 
-  int nsubcycles;  // output information
+  int nsubcycles; // output information
   int internal_tests;
   double tests_tolerance;
 
-protected:
+ protected:
   Key saturation_key_;
   Key flux_key_;
   Key darcy_flux_key_;
@@ -456,7 +475,7 @@ protected:
   Key molar_density_key_;
   Key solid_residue_mass_key_;
   Key water_content_key_;
-  Key water_src_key_;
+  Key water_src_key_, solute_src_key_;
   bool has_water_src_key_;
   bool water_src_in_meters_;
   Key geochem_src_factor_key_;
@@ -472,8 +491,8 @@ protected:
   Key passwd_;
 
   Teuchos::RCP<CompositeVector> tcc_w_src;
-  Teuchos::RCP<CompositeVector> tcc_tmp;  // next tcc
-  Teuchos::RCP<CompositeVector> tcc;  // smart mirrow of tcc
+  Teuchos::RCP<CompositeVector> tcc_tmp; // next tcc
+  Teuchos::RCP<CompositeVector> tcc;     // smart mirrow of tcc
   Teuchos::RCP<Epetra_MultiVector> conserve_qty_, solid_qty_, water_qty_;
   Teuchos::RCP<const Epetra_MultiVector> flux_;
   Teuchos::RCP<const Epetra_MultiVector> ws_, ws_prev_, phi_, mol_dens_, mol_dens_prev_;
@@ -487,21 +506,21 @@ protected:
   Teuchos::RCP<Epetra_IntVector> upwind_cell_;
   Teuchos::RCP<Epetra_IntVector> downwind_cell_;
 
-  Teuchos::RCP<const Epetra_MultiVector> ws_current, ws_next;  // data for subcycling
-  Teuchos::RCP<const Epetra_MultiVector> mol_dens_current, mol_dens_next;  // data for subcycling
+  Teuchos::RCP<const Epetra_MultiVector> ws_current, ws_next;             // data for subcycling
+  Teuchos::RCP<const Epetra_MultiVector> mol_dens_current, mol_dens_next; // data for subcycling
   Teuchos::RCP<Epetra_MultiVector> ws_subcycle_current, ws_subcycle_next;
   Teuchos::RCP<Epetra_MultiVector> mol_dens_subcycle_current, mol_dens_subcycle_next;
 
-  int current_component_;  // data for lifting
+  int current_component_; // data for lifting
   Teuchos::RCP<Operators::ReconstructionCellLinear> lifting_;
   Teuchos::RCP<Operators::LimiterCell> limiter_;
 
-  std::vector<Teuchos::RCP<TransportDomainFunction> > srcs_;  // Source or sink for components
-  std::vector<Teuchos::RCP<TransportDomainFunction> > bcs_;  // influx BC for components
+  std::vector<Teuchos::RCP<TransportDomainFunction>> srcs_; // Source or sink for components
+  std::vector<Teuchos::RCP<TransportDomainFunction>> bcs_;  // influx BC for components
   double bc_scaling;
-  Teuchos::RCP<Epetra_Vector> Kxy;  // absolute permeability in plane xy
+  Teuchos::RCP<Epetra_Vector> Kxy; // absolute permeability in plane xy
 
-  Teuchos::RCP<Epetra_Import> cell_importer;  // parallel communicators
+  Teuchos::RCP<Epetra_Import> cell_importer; // parallel communicators
   Teuchos::RCP<Epetra_Import> face_importer;
 
   // mechanical dispersion and molecual diffusion
@@ -509,10 +528,10 @@ protected:
   std::vector<WhetStone::Tensor> D_;
 
   bool flag_dispersion_;
-  std::vector<int> axi_symmetry_;  // axi-symmetry direction of permeability tensor
+  std::vector<int> axi_symmetry_; // axi-symmetry direction of permeability tensor
 
-  std::vector<Teuchos::RCP<MaterialProperties> > mat_properties_;  // vector of materials
-  std::vector<Teuchos::RCP<DiffusionPhase> > diffusion_phase_;   // vector of phases
+  std::vector<Teuchos::RCP<MaterialProperties>> mat_properties_; // vector of materials
+  std::vector<Teuchos::RCP<DiffusionPhase>> diffusion_phase_;    // vector of phases
 
   // Hosting temporarily Henry law
   bool henry_law_;
@@ -521,18 +540,18 @@ protected:
 
   double cfl_, dt_, dt_debug_, t_physics_;
 
-  std::vector<double> mass_solutes_exact_, mass_solutes_source_;  // mass for all solutes
+  std::vector<double> mass_solutes_exact_, mass_solutes_source_; // mass for all solutes
   std::vector<double> mass_solutes_bc_, mass_solutes_stepstart_;
-  std::vector<std::string> runtime_solutes_;  // names of trached solutes
+  std::vector<std::string> runtime_solutes_; // solutes tracked for diagnostics
   std::vector<std::string> runtime_regions_;
 
   int ncells_owned, ncells_wghost;
   int nfaces_owned, nfaces_wghost;
   int nnodes_wghost;
 
-  std::vector<std::string> component_names_;  // details of components
+  std::vector<std::string> component_names_; // details of components
   std::vector<double> mol_masses_;
-  int num_aqueous, num_gaseous, num_components;
+  int num_aqueous, num_gaseous, num_components, num_primary, num_advect;
   double water_tolerance_, max_tcc_;
   bool dissolution_;
 
@@ -543,18 +562,17 @@ protected:
   Tag tag_subcycle_next_;
   Tag tag_flux_next_ts_; // what is this? --ETC
 
-private:
+ private:
   // Forbidden.
   Transport_ATS(const Transport_ATS&) = delete;
   Transport_ATS& operator=(const Transport_ATS&) = delete;
 
-private:
+ private:
   // factory registration
   static RegisteredPKFactory<Transport_ATS> reg_;
 };
 
-}  // namespace Transport
-}  // namespace Amanzi
+} // namespace Transport
+} // namespace Amanzi
 
 #endif
-
