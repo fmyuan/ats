@@ -274,8 +274,8 @@ void ELM_ATSDriver::get_mesh_info(int& ncols_local,
 
   // hard-coded Toledo OH for now...
   for (int i=0; i!=ncolumns_; ++i) {
-    lat[i] = 41.65;
-    lon[i] = -83.54;
+    lat[i] = 41.7505;
+    lon[i] = 276.7505+i*0.001;
   }
 }
 
