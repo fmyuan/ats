@@ -5,12 +5,18 @@
 #include "errors.hh"
 #include "dbc.hh"
 
+#include <Epetra_Comm.h>
+#include <Epetra_MpiComm.h>
+#include "Epetra_SerialComm.h"
+
 #include "Teuchos_ParameterList.hpp"
 #include "Teuchos_ParameterXMLFileReader.hpp"
 #include "Teuchos_XMLParameterListHelpers.hpp"
 #include "Teuchos_TimeMonitor.hpp"
+#include "Teuchos_CommHelpers.hpp"
 #include "Teuchos_StandardParameterEntryValidators.hpp"
 #include "Teuchos_VerboseObjectParameterListHelpers.hpp"
+#include "Teuchos_DefaultComm.hpp"
 #include "VerboseObject.hh"
 
 // registration files
@@ -44,6 +50,7 @@ createELM_ATSDriver(MPI_Fint *f_comm, const char *infile, int npfts) {
   //auto comm = getDefaultComm();
   auto c_comm = MPI_Comm_f2c(*f_comm);
   auto comm = getComm(c_comm);
+  auto teuchos_comm = Teuchos::DefaultComm<int>::getComm();
   auto rank = comm->MyPID();
 
   // convert input file to std::string for easier handling
@@ -59,16 +66,20 @@ createELM_ATSDriver(MPI_Fint *f_comm, const char *infile, int npfts) {
       std::cerr << "ERROR: input file \"" << input_filename << "\" does not exist." << std::endl;
   }
 
+  auto wallclock_timer = Teuchos::TimeMonitor::getNewCounter("wallclock duration");
+
   // -- parse input file
   Teuchos::RCP<Teuchos::ParameterList> plist = Teuchos::getParametersFromXmlFile(input_filename);
-  return new ELM_ATSDriver(plist, comm, npfts);
+  return new ELM_ATSDriver(plist, wallclock_timer, teuchos_comm, comm, npfts);
 }
 
 
 ELM_ATSDriver::ELM_ATSDriver(const Teuchos::RCP<Teuchos::ParameterList>& plist,
-                             const Comm_ptr_type& comm,
+                             const Teuchos::RCP<Teuchos::Time>& wallclock_timer,
+                             const Teuchos::RCP <const Teuchos::Comm<int> >& teuchos_comm,
+                             const Amanzi::Comm_ptr_type& comm,
                              int npfts)
-  : Coordinator(plist, comm),
+  : Coordinator(plist, wallclock_timer, teuchos_comm, comm),
     npfts_(npfts),
     ncolumns_(-1),
     ncells_per_col_(-1)
