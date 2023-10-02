@@ -551,11 +551,22 @@ ELM_ATSDriver::get_water_fluxes(double * const surf_subsurf_flx,
   const auto& surfdens = *S_->Get<CompositeVector>(surf_mol_dens_key_, Amanzi::Tags::NEXT)
     .ViewComponent("cell", false);
 
+  // potential SS
+  auto& input = *S_->GetW<CompositeVector>(pot_infilt_key_, Amanzi::Tags::NEXT, pot_infilt_key_)
+    .ViewComponent("cell", false);
+  auto& pevap = *S_->GetW<CompositeVector>(pot_evap_key_, Amanzi::Tags::NEXT, pot_evap_key_)
+    .ViewComponent("cell", false);
+
   // convert mol/m2/s to mmH2O/s for ELM
   // mol/m2/s * m3/mol  = m/s * mm/m = mm/s
   for (int i=0; i!=ncolumns_; ++i) {
     const double mm_per_mol = 1000.0 / surfdens[0][i];
-    surf_subsurf_flx[i] = ss_flux[0][i] * mm_per_mol;
+    if (input[0][i]>0.0) {
+      //'ss_flux' is net SS of potential infiltration - potential soil evaporation
+      surf_subsurf_flx[i] = ss_flux[0][i] * mm_per_mol;
+    }else {
+      surf_subsurf_flx[i] =	0.0;
+    }
     evaporation[i] = evap[0][i] * mm_per_mol;
     transpiration[i] = trans[0][i] * mm_per_mol;
   }
