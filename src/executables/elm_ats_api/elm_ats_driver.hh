@@ -86,7 +86,9 @@ public:
 
   void get_waterstate(double * const ponded_depth,
                       double * const wt_depth,
-                      double * const sat_liq);
+                      double * const sat_liq,
+					  double * const sat_ice,
+					  double * const soilpsi);
 
   void get_water_fluxes(double * const soil_infiltration,
                         double * const evaporation,

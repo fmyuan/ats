@@ -471,11 +471,17 @@ ELM_ATSDriver::set_potential_sources(double const * const elm_surface_source,
 void
 ELM_ATSDriver::get_waterstate(double * const ponded_depth,
         double * const wt_depth,
-        double * const sat_liq)
+        double * const sat_liq,
+		double * const sat_ice,
+		double * const soilpsi)
 {
   // convert saturation into [kg/m2] from [-]
   S_->GetEvaluator(sat_key_, Amanzi::Tags::NEXT).Update(*S_, sat_key_);
   const auto& satl = *S_->Get<CompositeVector>(sat_key_, Amanzi::Tags::NEXT)
+    .ViewComponent("cell", false);
+
+  S_->GetEvaluator(pc_key_, Amanzi::Tags::NEXT).Update(*S_, pc_key_);
+  const auto& pc = *S_->Get<CompositeVector>(pc_key_, Amanzi::Tags::NEXT)
     .ViewComponent("cell", false);
 
   S_->GetEvaluator(poro_key_, Amanzi::Tags::NEXT).Update(*S_, poro_key_);
@@ -493,6 +499,8 @@ ELM_ATSDriver::get_waterstate(double * const ponded_depth,
     const auto& cells_of_col = mesh_subsurf_->cells_of_column(i);
     for (int j=0; j!=ncells_per_col_; ++j) {
       sat_liq[j * ncolumns_ + i] = satl[0][cells_of_col[j]] * por[0][cells_of_col[j]] * dens[0][cells_of_col[j]] * dz[j];
+      sat_ice[j * ncolumns_ + i] = 0.; // TODO when ice module ready for coupling
+      soilpsi[j * ncolumns_ + i] = pc[0][cells_of_col[j]];
     }
   }
 
