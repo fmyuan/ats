@@ -44,6 +44,7 @@ MPCCoupledWater::parseParameterList()
   // keys
   exfilt_key_ =
     Keys::readKey(*plist_, domain_surf_, "exfiltration flux", "surface_subsurface_flux");
+  requireAtNext(exfilt_key_, tag_next_, *S_, exfilt_key_);
 
   StrongMPC<PK_PhysicalBDF_Default>::parseParameterList();
 }
