@@ -28,6 +28,11 @@ namespace ATS {
 
 ELM_ATSDriver*
 createELM_ATSDriver(MPI_Fint *f_comm, const char *infile, int npfts) {
+  //MSTK mesh using Kokkos, which requires initialization.
+  // otherwise, error during mesh creation stage like:
+  // runtime_error: Constructing View and initializing data with uninitialized execution space
+  Kokkos::initialize();
+
   // -- create communicator & get process rank
   //auto comm = getDefaultComm();
   auto c_comm = MPI_Comm_f2c(*f_comm);
