@@ -68,7 +68,7 @@ void ats_setup(ELM_ATSDriver_ptr ats);
 // call driver initialize()
 void ats_initialize(ELM_ATSDriver_ptr ats,
                       double const * const t,
-                      double const * const patm,
+                      double const * const soilwc,
                       double const * const soilp);
 
 // set material parameters, which are constant in time
