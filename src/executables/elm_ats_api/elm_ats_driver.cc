@@ -87,6 +87,9 @@ ELM_ATSDriver::ELM_ATSDriver(const Teuchos::RCP<Teuchos::ParameterList>& plist,
   lon_key_ = Keys::readKey(*plist_, domain_surf_, "longitude", "longitude");
   elev_key_ = Keys::readKey(*plist_, domain_surf_, "elevation", "elevation");
 
+  pres_key_ = Keys::readKey(*plist_, domain_subsurf_, "pressure", "flow");
+  surfpres_key_ = Keys::readKey(*plist_, domain_surf_, "surface-pressure", "overland flow");
+
   // soil parameters/properties
   base_poro_key_ = Keys::readKey(*plist_, domain_subsurf_, "base porosity", "base_porosity");
   poro_key_ = Keys::readKey(*plist_, domain_subsurf_, "porosity", "porosity");
@@ -104,7 +107,6 @@ ELM_ATSDriver::ELM_ATSDriver(const Teuchos::RCP<Teuchos::ParameterList>& plist,
   // water state
   pd_key_ = Keys::readKey(*plist_, domain_surf_, "ponded depth", "ponded_depth");
   wtd_key_ = Keys::readKey(*plist_, domain_surf_, "water table depth", "water_table_depth");
-  pres_key_ = Keys::readKey(*plist_, domain_subsurf_, "pressure", "pressure");
   wc_key_ = Keys::readKey(*plist_, domain_subsurf_, "conserved", "water_content");
   pc_key_ = Keys::readKey(*plist_, domain_subsurf_, "capillary_pressure_gas_liq", "capillary_pressure_gas_liq");
   sat_key_ = Keys::readKey(*plist_, domain_subsurf_, "saturation", "saturation_liquid");
@@ -150,6 +152,13 @@ ELM_ATSDriver::ELM_ATSDriver(const Teuchos::RCP<Teuchos::ParameterList>& plist,
 void
 ELM_ATSDriver::setup()
 {
+
+  requireAtNext(pres_key_, Amanzi::Tags::NEXT, *S_, "flow")
+    .SetMesh(mesh_subsurf_)->AddComponent("cell", AmanziMesh::CELL, 1);
+
+  requireAtNext(surfpres_key_, Amanzi::Tags::NEXT, *S_, "overland flow")
+    .SetMesh(mesh_surf_)->AddComponent("cell", AmanziMesh::CELL, 1);
+
   // potential fluxes (ELM -> ATS)
   requireAtNext(pot_infilt_key_, Amanzi::Tags::NEXT, *S_, pot_infilt_key_)
     .SetMesh(mesh_surf_)->AddComponent("cell", AmanziMesh::CELL, 1);
@@ -224,10 +233,16 @@ ELM_ATSDriver::setup()
 
   requireAtNext(infilt_key_, Amanzi::Tags::NEXT, *S_)
     .SetMesh(mesh_surf_)->AddComponent("cell", AmanziMesh::CELL, 1);
-  requireAtNext(pres_key_, Amanzi::Tags::NEXT, *S_, "flow")
-    .SetMesh(mesh_subsurf_)->AddComponent("cell", AmanziMesh::CELL, 1);
 
   Coordinator::setup();
+
+  /*
+  // post setup checking example
+  Key mykey2 = Keys::readKey(*plist_, domain_subsurf_, "permeability", "permeability");
+  S_->GetEvaluator(mykey2, Amanzi::Tags::NEXT).Update(*S_, mykey2);
+  const auto& mydata2 = *S_->Get<CompositeVector>(mykey2, Amanzi::Tags::NEXT)
+    .ViewComponent("cell", false);
+  */
 }
 
 
@@ -304,6 +319,19 @@ void ELM_ATSDriver::initialize(double t,
   // visualization at IC -- TODO remove this or place behind flag
   visualize();
   checkpoint();
+
+  /*
+  // examples - post default initialization checking?
+  Key mykey = Keys::readKey(*plist_, domain_subsurf_, "pressure", "flow");
+  S_->GetEvaluator(mykey, Amanzi::Tags::NEXT).Update(*S_, mykey);
+  const auto& mydata = *S_->Get<CompositeVector>(mykey, Amanzi::Tags::NEXT)
+    .ViewComponent("cell", false);
+
+  Key mykey2 = Keys::readKey(*plist_, domain_surf_, "surface-pressure", "overland flow");
+  S_->GetEvaluator(mykey2, Amanzi::Tags::NEXT).Update(*S_, mykey2);
+  const auto& mydata2 = *S_->Get<CompositeVector>(mykey2, Amanzi::Tags::NEXT)
+    .ViewComponent("cell", false);
+  */
 }
 
 // use incoming water content to initialize pressure field
@@ -331,6 +359,9 @@ void ELM_ATSDriver::init_pressure_from_wc_(double const * const elm_water_conten
 
   // writable to pressure
   auto& pres = *S_->GetW<CompositeVector>(pres_key_, Amanzi::Tags::NEXT, "flow")
+    .ViewComponent("cell", false);
+
+  auto& surfpres = *S_->GetW<CompositeVector>(surfpres_key_, Amanzi::Tags::NEXT, "overland flow")
     .ViewComponent("cell", false);
 
   // WRM model
@@ -367,12 +398,17 @@ void ELM_ATSDriver::init_pressure_from_wc_(double const * const elm_water_conten
         pres[0][cells_of_col[j]] = p_atm + rho * g * (sat_depth - dz/2);
       }
     }
+    surfpres[0][i] = pres[0][0];
   }
 
   // mark pressure as changed and update face values
   changedEvaluatorPrimary(pres_key_, Amanzi::Tags::NEXT, *S_);
   DeriveFaceValuesFromCellValues(S_->GetW<CompositeVector>(pres_key_, Amanzi::Tags::NEXT, "flow"));
   S_->GetRecordW(pres_key_, Amanzi::Tags::NEXT, "flow").set_initialized();
+
+  changedEvaluatorPrimary(surfpres_key_, Amanzi::Tags::NEXT, *S_);
+  DeriveFaceValuesFromCellValues(S_->GetW<CompositeVector>(surfpres_key_, Amanzi::Tags::NEXT, "overland flow"));
+  S_->GetRecordW(surfpres_key_, Amanzi::Tags::NEXT, "overland flow").set_initialized();
 
   // update saturation and water content
   S_->GetEvaluator(sat_key_, Amanzi::Tags::NEXT).Update(*S_, sat_key_);
