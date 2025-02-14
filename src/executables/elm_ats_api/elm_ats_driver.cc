@@ -99,7 +99,7 @@ ELM_ATSDriver::ELM_ATSDriver(const Teuchos::RCP<Teuchos::ParameterList>& plist,
   ch_sr_key_ = Keys::readKey(*plist_, domain_subsurf_, "Clapp and Hornberger residual saturation", "clapp_horn_sr");
 
   // potential sources
-  root_frac_key_ = Keys::readKey(*plist_, domain_subsurf_, "rooting depth fraction", "rooting_depth_fraction");
+  root_frac_key_ = Keys::readKey(*plist_, domain_subsurf_, "root fraction", "root_fraction");
   pot_infilt_key_ = Keys::readKey(*plist_, domain_surf_, "potential infiltration mps", "potential_infiltration_mps"); // inputs onto surface (rain, snowmelt)
   pot_evap_key_ = Keys::readKey(*plist_, domain_surf_, "potential evaporation mps", "potential_evaporation_mps");
   pot_trans_key_ = Keys::readKey(*plist_, domain_surf_, "potential transpiration mps", "potential_transpiration_mps");
