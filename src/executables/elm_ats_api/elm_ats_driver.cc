@@ -242,6 +242,8 @@ ELM_ATSDriver::setup()
   requireEvaluatorAtNext(trans_key_, Amanzi::Tags::NEXT, *S_)
    .SetMesh(mesh_subsurf_)->AddComponent("cell", AmanziMesh::CELL, 1);
 
+  // for following to work, may need to rename 'overland-surface_subsurface_flux'
+  // to 'surface-surface_subsurface_flux'
   requireEvaluatorAtNext(ss_flux_key_, Amanzi::Tags::NEXT, *S_)
     .SetMesh(mesh_surf_)->AddComponent("cell", AmanziMesh::CELL, 1);
 
@@ -327,7 +329,7 @@ void ELM_ATSDriver::initialize(double t,
   initZero_(pot_infilt_key_);
   initZero_(pot_trans_key_);
   initZero_(pot_evap_key_);
-  initZero_(infilt_key_);
+  initZero_(ss_flux_key_);
   initZero_(trans_key_);
   initZero_(evap_key_);
   initZero_(total_trans_key_);
