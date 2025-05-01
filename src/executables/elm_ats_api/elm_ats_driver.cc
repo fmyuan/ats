@@ -230,7 +230,7 @@ ELM_ATSDriver::setup()
   requireEvaluatorAtNext(trans_key_, Amanzi::Tags::NEXT, *S_)
    .SetMesh(mesh_subsurf_)->AddComponent("cell", AmanziMesh::CELL, 1);
 
-  requireEvaluatorAtNext(infilt_key_, Amanzi::Tags::NEXT, *S_)
+  requireEvaluatorAtNext(ss_flux_key_, Amanzi::Tags::NEXT, *S_)
     .SetMesh(mesh_surf_)->AddComponent("cell", AmanziMesh::CELL, 1);
   requireEvaluatorAtNext(pres_key_, Amanzi::Tags::NEXT, *S_, "flow")
     .SetMesh(mesh_subsurf_)->AddComponent("cell", AmanziMesh::CELL, 1);
