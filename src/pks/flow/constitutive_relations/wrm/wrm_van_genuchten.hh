@@ -91,10 +91,14 @@ class WRMVanGenuchten : public WRM {
   int function_;
   double s0_; // regularization threshold in saturation
   Amanzi::Utils::Spline fit_kr_;
+  Amanzi::Utils::Spline fit_pc_;
 
   double pc0_;
   Amanzi::Utils::Spline fit_s_;
 
+  double s1_; // regularization threshold in saturation of dry-end
+  Amanzi::Utils::Spline fit_kr1_;
+  Amanzi::Utils::Spline fit_pc1_;
 
   static Utils::RegisteredFactory<WRM, WRMVanGenuchten> factory_;
 };

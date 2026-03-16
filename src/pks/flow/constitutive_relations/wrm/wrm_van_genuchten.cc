@@ -39,6 +39,9 @@ double
 WRMVanGenuchten::k_relative(double s)
 {
   if (s <= s0_) {
+	//dry-end smoothing or cutoff
+	if (s < s1_) { return fit_kr1_(s); }
+
     double se = (s - sr_) / (1 - sr_);
     if (function_ == FLOW_WRM_MUALEM) {
       return pow(se, l_) * pow(1.0 - pow(1.0 - pow(se, 1.0 / m_), m_), 2.0);
@@ -60,6 +63,9 @@ double
 WRMVanGenuchten::d_k_relative(double s)
 {
   if (s <= s0_) {
+    //dry-end smoothing or cutoff
+    if (s < s1_) { return fit_kr1_.Derivative(s); }
+
     double se = (s - sr_) / (1 - sr_);
 
     double x = pow(se, 1.0 / m_);
@@ -120,6 +126,12 @@ WRMVanGenuchten::d_saturation(double pc)
 double
 WRMVanGenuchten::capillaryPressure(double s)
 {
+  //dry-end smoothing or cutoff
+  if (s < s1_) { return fit_pc1_(s); }
+
+  //wet-end smoothing
+  if (s > s0_ && s > sr_) { return fit_pc_(s); }
+
   double se = (s - sr_) / (1.0 - sr_);
   se = std::min<double>(se, 1.0);
   se = std::max<double>(se, 1.e-40);
@@ -137,6 +149,11 @@ WRMVanGenuchten::capillaryPressure(double s)
 double
 WRMVanGenuchten::d_capillaryPressure(double s)
 {
+  //dry-end smoothing or cutoff
+  if (s < s1_) { return fit_pc1_.Derivative(s); }
+  //wet-end smoothing
+  if (s > s0_ && s > sr_) { return fit_pc_.Derivative(s); }
+
   double se = (s - sr_) / (1.0 - sr_);
   se = std::min<double>(se, 1.0);
   se = std::max<double>(se, 1.e-40);
@@ -220,14 +237,25 @@ WRMVanGenuchten::InitializeFromPlist_()
   }
 
   s0_ = 1.0 - plist_.get<double>("smoothing interval width [saturation]", 0.0);
-  if (s0_ < 1.) {
+  if (s0_ > 0. && s0_ < 1.) {
     fit_kr_.Setup(s0_, k_relative(s0_), d_k_relative(s0_), 1.0, 1.0, 0.0);
+    fit_pc_.Setup(s0_, capillaryPressure(s0_), d_capillaryPressure(s0_), 1.0, 0.0, 0.0);
   }
 
   pc0_ = plist_.get<double>("saturation smoothing interval [Pa]", 0.0);
   if (pc0_ > 0.) {
     fit_s_.Setup(0.0, 1.0, 0.0, pc0_, saturation(pc0_), d_saturation(pc0_));
   }
+
+  // the above 2 smoothings are for wet-end,
+  // but may need smoothing for dry-end as well.
+  s1_ = plist_.get<double>("dry-end smoothing interval width [saturation]", 0.0);
+  if (s1_ > 0. && s1_ < 1.) {
+    fit_kr1_.Setup(0.0, 0.0, 0.0, s1_, k_relative(s1_), d_k_relative(s1_));
+    double pcmax = capillaryPressure(s1_)*10.;
+    fit_pc1_.Setup(0.0, pcmax, 0.0, s1_, capillaryPressure(s1_), d_capillaryPressure(s1_));
+  }
+
 };
 
 /* ******************************************************************
