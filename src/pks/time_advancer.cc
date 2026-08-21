@@ -203,9 +203,9 @@ TimeAdvancer::initialize()
   }
 
   // dump initial conditions
-  visualize_();
-  observe_();
-  checkpoint_();
+  visualize();
+  observe();
+  checkpoint();
 }
 
 
@@ -240,20 +240,8 @@ TimeAdvancer::advance(double t_start, double t_end)
 
     // done?
     if (std::abs(t_end - t_now) < 1.e-10 * std::abs(t_end + 1.)) break;
-    if (extraDoneCheck_(t_now, S_->get_cycle())) break;
-
-    // A negative dt is a deliberate signal from some steady-state PKs that no
-    // second step is to be taken (see TimestepControllerRecoverable::
-    // getTimestep()), so stop quietly.  A dt of exactly zero is never a valid
-    // request: it cannot advance time, so continuing would spin and exiting
-    // would report success from a run that never reached t_end.
-    if (dt == 0.) {
-      Errors::Message msg;
-      msg << "TimeAdvancer: timestep of zero at t = " << t_now << " (t_end = " << t_end
-          << "); cannot advance time.";
-      Exceptions::amanzi_throw(msg);
-    }
-    if (dt < 0.) break;
+    if (extraDoneCheck_(t_now, S_->get_cycle(tag_next_))) break;
+    if (dt <= 0.) break;
 
     // constrain dt via TSM, then clamp
     dt = tsm_->TimeStep(t_now, dt, fail);
@@ -361,9 +349,9 @@ void
 TimeAdvancer::CommitStep_(double t_old, double t_new)
 {
   for (auto* acc : accumulators_) acc->Update(*S_, "time_advancer");
-  visualize_();
-  observe_();
-  checkpoint_();
+  visualize();
+  observe();
+  checkpoint();
 }
 
 
@@ -387,11 +375,11 @@ TimeAdvancer::extraDoneCheck_(double t, int cycle) const
 
 
 bool
-TimeAdvancer::visualize_(bool force)
+TimeAdvancer::visualize(bool force)
 {
   bool dump = force;
-  int cycle = S_->get_cycle();
-  double time = S_->get_time();
+  int cycle = S_->get_cycle(tag_next_);
+  double time = S_->get_time(tag_next_);
   if (!dump) {
     for (const auto& vis : visualization_) dump |= vis->DumpRequested(cycle, time);
   }
@@ -404,17 +392,17 @@ TimeAdvancer::visualize_(bool force)
 
 
 void
-TimeAdvancer::observe_()
+TimeAdvancer::observe()
 {
   for (const auto& obs : observations_) obs->MakeObservations(S_.ptr());
 }
 
 
 bool
-TimeAdvancer::checkpoint_(bool force)
+TimeAdvancer::checkpoint(bool force)
 {
-  int cycle = S_->get_cycle();
-  double time = S_->get_time();
+  int cycle = S_->get_cycle(tag_next_);
+  double time = S_->get_time(tag_next_);
   bool dump = force || checkpoint_obj_->DumpRequested(cycle, time);
   if (dump) checkpoint_obj_->Write(*S_);
   return dump;

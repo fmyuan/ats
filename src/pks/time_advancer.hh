@@ -123,6 +123,10 @@ class TimeAdvancer {
   {
     step_validity_check_ = f;
   }
+  // vis/obs/checkpoint helpers
+  bool visualize(bool force = false);
+  void observe();
+  bool checkpoint(bool force = false);
 
  protected:
   // Hooks called after each inner step — override for custom behavior.
@@ -134,11 +138,6 @@ class TimeAdvancer {
  private:
   // True when the loop should stop (besides reaching t_end).
   bool extraDoneCheck_(double t, int cycle) const;
-
-  // vis/obs/checkpoint helpers
-  bool visualize_(bool force = false);
-  void observe_();
-  bool checkpoint_(bool force = false);
 
   Teuchos::RCP<Teuchos::ParameterList> plist_;
   Teuchos::RCP<Amanzi::VerboseObject> vo_;
