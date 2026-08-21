@@ -256,6 +256,8 @@ WRMVanGenuchten::InitializeFromPlist_()
     fit_pc1_.Setup(0.0, pcmax, 0.0, s1_, capillaryPressure(s1_), d_capillaryPressure(s1_));
   }
 
+  double k_rel_fc = plist_.get<double>("field capacity relative permeability [-]", 1.e-3);
+  sat_fc_ = computeFieldCapacity(*this, k_rel_fc);
 };
 
 /* ******************************************************************

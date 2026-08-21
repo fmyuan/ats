@@ -34,6 +34,9 @@ van Genuchten's water retention curve.
     * `"smoothing interval width [saturation]`" ``[double]`` **0.0**
     * `"Mualem exponent l [-]`" ``[double]`` **0.5**
     * `"Krel function name`" ``[string]`` **Mualem**  `"Mualem`" or `"Burdine`"
+    * `"field capacity relative permeability [-]`" ``[double]`` **1.e-3**
+      Relative permeability threshold defining field capacity -- the liquid
+      saturation at which ``k_relative(saturation) == `` this value.
 
 Example:
 
@@ -76,6 +79,7 @@ class WRMVanGenuchten : public WRM {
   double residualSaturation() { return sr_; }
   double suction_head(double saturation);
   double d_suction_head(double saturation);
+  double field_capacity() { return sat_fc_; }
 
  private:
   void InitializeFromPlist_();
@@ -99,6 +103,7 @@ class WRMVanGenuchten : public WRM {
   double s1_; // regularization threshold in saturation of dry-end
   Amanzi::Utils::Spline fit_kr1_;
   Amanzi::Utils::Spline fit_pc1_;
+  double sat_fc_; // cached liquid saturation at field capacity
 
   static Utils::RegisteredFactory<WRM, WRMVanGenuchten> factory_;
 };
